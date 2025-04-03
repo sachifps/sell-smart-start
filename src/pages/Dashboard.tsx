@@ -1,17 +1,83 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, LineChart, PieChart, DollarSign, TrendingUp, Users, Package } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
+type SalesWithDetails = {
+  transno: string;
+  salesdate: string | null;
+  custno: string | null;
+  empno: string | null;
+  productDetails: {
+    prodcode: string;
+    quantity: number | null;
+  }[];
+};
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [salesData, setSalesData] = useState<SalesWithDetails[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSalesData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Fetch sales data
+        const { data: salesData, error: salesError } = await supabase
+          .from('sales')
+          .select('*');
+        
+        if (salesError) throw salesError;
+        
+        if (!salesData || salesData.length === 0) {
+          setSalesData([]);
+          setIsLoading(false);
+          return;
+        }
+        
+        // For each sales record, fetch its product details
+        const salesWithDetails = await Promise.all(
+          salesData.map(async (sale) => {
+            const { data: detailsData, error: detailsError } = await supabase
+              .from('salesdetail')
+              .select('prodcode, quantity')
+              .eq('transno', sale.transno);
+            
+            if (detailsError) throw detailsError;
+            
+            return {
+              ...sale,
+              productDetails: detailsData || []
+            };
+          })
+        );
+        
+        setSalesData(salesWithDetails);
+      } catch (error) {
+        console.error('Error fetching sales data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchSalesData();
+  }, []);
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString();
   };
 
   return (
@@ -82,6 +148,63 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         </div>
+        
+        <Card className="mb-8">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-medium">Sales Data</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="flex justify-center p-6">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-sales-600"></div>
+              </div>
+            ) : salesData.length === 0 ? (
+              <div className="text-center p-6 text-muted-foreground">
+                No sales data available
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Transaction #</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Customer #</TableHead>
+                      <TableHead>Employee #</TableHead>
+                      <TableHead>Product Code</TableHead>
+                      <TableHead>Quantity</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {salesData.flatMap((sale) => 
+                      sale.productDetails.length > 0 
+                        ? sale.productDetails.map((detail, index) => (
+                            <TableRow key={`${sale.transno}-${detail.prodcode}-${index}`}>
+                              <TableCell>{sale.transno}</TableCell>
+                              <TableCell>{formatDate(sale.salesdate)}</TableCell>
+                              <TableCell>{sale.custno || 'N/A'}</TableCell>
+                              <TableCell>{sale.empno || 'N/A'}</TableCell>
+                              <TableCell>{detail.prodcode}</TableCell>
+                              <TableCell>{detail.quantity || 0}</TableCell>
+                            </TableRow>
+                          ))
+                        : (
+                            <TableRow key={sale.transno}>
+                              <TableCell>{sale.transno}</TableCell>
+                              <TableCell>{formatDate(sale.salesdate)}</TableCell>
+                              <TableCell>{sale.custno || 'N/A'}</TableCell>
+                              <TableCell>{sale.empno || 'N/A'}</TableCell>
+                              <TableCell>No product data</TableCell>
+                              <TableCell>N/A</TableCell>
+                            </TableRow>
+                          )
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <Card>
