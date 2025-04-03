@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,16 +9,10 @@ const Dashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
-
-  if (!user) {
-    // If user is not logged in, redirect to login
-    navigate('/login');
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -30,7 +23,7 @@ const Dashboard = () => {
           </div>
           <div className="flex items-center space-x-4">
             <span className="text-sm text-muted-foreground">
-              Welcome, {user.name}
+              Welcome, {user?.user_metadata?.name || user?.email}
             </span>
             <Button variant="outline" onClick={handleLogout}>Logout</Button>
           </div>

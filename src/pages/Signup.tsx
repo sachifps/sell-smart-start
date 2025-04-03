@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -15,8 +15,15 @@ const Signup = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { signup } = useAuth();
+  const { signup, user } = useAuth();
   const navigate = useNavigate();
+
+  // If user is already logged in, redirect to dashboard
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
 
   const validatePassword = () => {
     if (password !== confirmPassword) {
@@ -41,7 +48,7 @@ const Signup = () => {
     try {
       setIsSubmitting(true);
       await signup(name, email, password);
-      navigate('/dashboard');
+      // The signup process will handle redirects based on user state
     } catch (error) {
       console.error('Signup error:', error);
       setIsSubmitting(false);
