@@ -1,21 +1,30 @@
+
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BarChart, LineChart, PieChart, DollarSign, TrendingUp, Users, Package } from 'lucide-react';
+import { DollarSign, TrendingUp, Users, Package } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Checkbox } from '@/components/ui/checkbox';
 
 type SalesWithDetails = {
   transno: string;
   salesdate: string | null;
   custno: string | null;
   empno: string | null;
+  custname: string | null;
+  empname: string | null;
   productDetails: {
     prodcode: string;
     quantity: number | null;
+    description: string | null;
+    unit: string | null;
+    unitprice: number | null;
   }[];
+  totalPrice: number;
 };
 
 const Dashboard = () => {
@@ -23,16 +32,24 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [salesData, setSalesData] = useState<SalesWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [expandedTransaction, setExpandedTransaction] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchSalesData = async () => {
       try {
         setIsLoading(true);
         
-        // Fetch sales data
+        // Fetch sales data with related customer and employee info
         const { data: salesData, error: salesError } = await supabase
           .from('sales')
-          .select('*');
+          .select(`
+            transno,
+            salesdate,
+            custno,
+            empno,
+            customer:custno(custname),
+            employee:empno(firstname, lastname)
+          `);
         
         if (salesError) throw salesError;
         
@@ -42,19 +59,61 @@ const Dashboard = () => {
           return;
         }
         
-        // For each sales record, fetch its product details
+        // For each sales record, fetch its product details with product info and price
         const salesWithDetails = await Promise.all(
           salesData.map(async (sale) => {
             const { data: detailsData, error: detailsError } = await supabase
               .from('salesdetail')
-              .select('prodcode, quantity')
+              .select(`
+                prodcode,
+                quantity,
+                product:prodcode(description, unit)
+              `)
               .eq('transno', sale.transno);
             
             if (detailsError) throw detailsError;
             
+            // For each product, get the latest price from price history
+            const productDetailsWithPrice = await Promise.all(
+              (detailsData || []).map(async (detail) => {
+                // Get the most recent price before or on the sale date
+                const { data: priceData, error: priceError } = await supabase
+                  .from('pricehist')
+                  .select('unitprice')
+                  .eq('prodcode', detail.prodcode)
+                  .lte('effdate', sale.salesdate || new Date().toISOString())
+                  .order('effdate', { ascending: false })
+                  .limit(1);
+                
+                if (priceError) throw priceError;
+                
+                const unitprice = priceData && priceData.length > 0 ? priceData[0].unitprice : null;
+                
+                return {
+                  prodcode: detail.prodcode,
+                  quantity: detail.quantity,
+                  description: detail.product?.description,
+                  unit: detail.product?.unit,
+                  unitprice
+                };
+              })
+            );
+            
+            // Calculate total price for all products in this transaction
+            const totalPrice = productDetailsWithPrice.reduce((sum, product) => {
+              const productTotal = (product.quantity || 0) * (product.unitprice || 0);
+              return sum + productTotal;
+            }, 0);
+            
             return {
-              ...sale,
-              productDetails: detailsData || []
+              transno: sale.transno,
+              salesdate: sale.salesdate,
+              custno: sale.custno,
+              empno: sale.empno,
+              custname: sale.customer?.custname,
+              empname: sale.employee ? `${sale.employee.firstname || ''} ${sale.employee.lastname || ''}`.trim() : null,
+              productDetails: productDetailsWithPrice,
+              totalPrice
             };
           })
         );
@@ -77,7 +136,26 @@ const Dashboard = () => {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString('en-US', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount);
+  };
+
+  const toggleTransaction = (transno: string) => {
+    if (expandedTransaction === transno) {
+      setExpandedTransaction(null);
+    } else {
+      setExpandedTransaction(transno);
+    }
   };
 
   return (
@@ -104,7 +182,9 @@ const Dashboard = () => {
             <CardContent className="p-6 flex justify-between items-center">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Sales</p>
-                <p className="text-2xl font-bold">$12,345</p>
+                <p className="text-2xl font-bold">
+                  {formatCurrency(salesData.reduce((sum, sale) => sum + sale.totalPrice, 0))}
+                </p>
               </div>
               <div className="h-12 w-12 bg-sales-100 rounded-full flex items-center justify-center text-sales-500">
                 <DollarSign size={24} />
@@ -115,8 +195,8 @@ const Dashboard = () => {
           <Card className="border-l-4 border-l-green-500">
             <CardContent className="p-6 flex justify-between items-center">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Growth</p>
-                <p className="text-2xl font-bold">+12.5%</p>
+                <p className="text-sm font-medium text-muted-foreground">Transactions</p>
+                <p className="text-2xl font-bold">{salesData.length}</p>
               </div>
               <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center text-green-500">
                 <TrendingUp size={24} />
@@ -128,7 +208,9 @@ const Dashboard = () => {
             <CardContent className="p-6 flex justify-between items-center">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Customers</p>
-                <p className="text-2xl font-bold">148</p>
+                <p className="text-2xl font-bold">
+                  {new Set(salesData.map(sale => sale.custno)).size}
+                </p>
               </div>
               <div className="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center text-purple-500">
                 <Users size={24} />
@@ -140,7 +222,11 @@ const Dashboard = () => {
             <CardContent className="p-6 flex justify-between items-center">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Products</p>
-                <p className="text-2xl font-bold">56</p>
+                <p className="text-2xl font-bold">
+                  {new Set(salesData.flatMap(sale => 
+                    sale.productDetails.map(detail => detail.prodcode)
+                  )).size}
+                </p>
               </div>
               <div className="h-12 w-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-500">
                 <Package size={24} />
@@ -151,7 +237,7 @@ const Dashboard = () => {
         
         <Card className="mb-8">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-medium">Sales Data</CardTitle>
+            <CardTitle className="text-xl font-medium">Sales Transactions</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -163,84 +249,76 @@ const Dashboard = () => {
                 No sales data available
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Transaction #</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Customer #</TableHead>
-                      <TableHead>Employee #</TableHead>
-                      <TableHead>Product Code</TableHead>
-                      <TableHead>Quantity</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {salesData.flatMap((sale) => 
-                      sale.productDetails.length > 0 
-                        ? sale.productDetails.map((detail, index) => (
-                            <TableRow key={`${sale.transno}-${detail.prodcode}-${index}`}>
-                              <TableCell>{sale.transno}</TableCell>
-                              <TableCell>{formatDate(sale.salesdate)}</TableCell>
-                              <TableCell>{sale.custno || 'N/A'}</TableCell>
-                              <TableCell>{sale.empno || 'N/A'}</TableCell>
-                              <TableCell>{detail.prodcode}</TableCell>
-                              <TableCell>{detail.quantity || 0}</TableCell>
+              <div className="space-y-6">
+                {salesData.map((sale) => (
+                  <Collapsible 
+                    key={sale.transno}
+                    open={expandedTransaction === sale.transno}
+                    onOpenChange={() => toggleTransaction(sale.transno)}
+                    className="border rounded-md overflow-hidden"
+                  >
+                    <CollapsibleTrigger asChild>
+                      <div className="bg-slate-50 p-4 cursor-pointer hover:bg-slate-100">
+                        <h3 className="text-lg font-bold mb-4 text-center border-b pb-2">TRANSACTION</h3>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Transaction No</TableHead>
+                              <TableHead>Sales Date</TableHead>
+                              <TableHead>Customer Name</TableHead>
+                              <TableHead>Employee Name</TableHead>
                             </TableRow>
-                          ))
-                        : (
-                            <TableRow key={sale.transno}>
-                              <TableCell>{sale.transno}</TableCell>
+                          </TableHeader>
+                          <TableBody>
+                            <TableRow>
+                              <TableCell className="font-medium">{sale.transno}</TableCell>
                               <TableCell>{formatDate(sale.salesdate)}</TableCell>
-                              <TableCell>{sale.custno || 'N/A'}</TableCell>
-                              <TableCell>{sale.empno || 'N/A'}</TableCell>
-                              <TableCell>No product data</TableCell>
-                              <TableCell>N/A</TableCell>
+                              <TableCell>{sale.custname || 'N/A'}</TableCell>
+                              <TableCell>{sale.empname || 'N/A'}</TableCell>
                             </TableRow>
-                          )
-                    )}
-                  </TableBody>
-                </Table>
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="p-4">
+                        <h3 className="text-lg font-bold mb-4 text-center border-b pb-2">TRANSACTION DETAIL</h3>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Product Description</TableHead>
+                              <TableHead>Unit</TableHead>
+                              <TableHead>Quantity</TableHead>
+                              <TableHead>Unit Price</TableHead>
+                              <TableHead>Total Price</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sale.productDetails.map((product, index) => {
+                              const productTotal = (product.quantity || 0) * (product.unitprice || 0);
+                              return (
+                                <TableRow key={`${sale.transno}-${product.prodcode}-${index}`}>
+                                  <TableCell>{product.description || 'N/A'}</TableCell>
+                                  <TableCell>{product.unit || 'N/A'}</TableCell>
+                                  <TableCell>{product.quantity || 0}</TableCell>
+                                  <TableCell>{product.unitprice ? formatCurrency(product.unitprice) : 'N/A'}</TableCell>
+                                  <TableCell>{formatCurrency(productTotal)}</TableCell>
+                                </TableRow>
+                              );
+                            })}
+                            <TableRow className="border-t-2">
+                              <TableCell colSpan={3}></TableCell>
+                              <TableCell className="font-bold text-right">TOTAL PRICE</TableCell>
+                              <TableCell className="font-bold">{formatCurrency(sale.totalPrice)}</TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ))}
               </div>
             )}
-          </CardContent>
-        </Card>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg font-medium">Sales Overview</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="h-80 flex items-center justify-center bg-muted/20 rounded-md">
-                <LineChart className="h-16 w-16 text-muted-foreground/70" />
-                <span className="ml-2 text-muted-foreground">Sales chart will display here</span>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg font-medium">Revenue by Category</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="h-80 flex items-center justify-center bg-muted/20 rounded-md">
-                <PieChart className="h-16 w-16 text-muted-foreground/70" />
-                <span className="ml-2 text-muted-foreground">Category chart will display here</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-medium">Recent Sales</CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="h-80 flex items-center justify-center bg-muted/20 rounded-md">
-              <BarChart className="h-16 w-16 text-muted-foreground/70" />
-              <span className="ml-2 text-muted-foreground">Recent sales will display here</span>
-            </div>
           </CardContent>
         </Card>
       </main>
