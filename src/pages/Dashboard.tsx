@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DollarSign, TrendingUp, Users, Package, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Checkbox } from '@/components/ui/checkbox';
 
 type SalesWithDetails = {
   transno: string;
@@ -234,7 +233,7 @@ const Dashboard = () => {
           </Card>
         </div>
         
-        <Card className="mb-8">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xl font-medium">Sales Transactions</CardTitle>
           </CardHeader>
@@ -252,51 +251,58 @@ const Dashboard = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-10"></TableHead>
                       <TableHead>Transaction No</TableHead>
                       <TableHead>Sales Date</TableHead>
-                      <TableHead>Customer Name</TableHead>
-                      <TableHead>Employee Name</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Employee</TableHead>
                       <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {salesData.map((sale) => (
                       <React.Fragment key={sale.transno}>
                         <TableRow 
-                          className="cursor-pointer hover:bg-muted/80"
+                          className="cursor-pointer hover:bg-muted/50"
                           onClick={() => toggleTransaction(sale.transno)}
                         >
-                          <TableCell>
-                            <div className="flex h-7 w-7 items-center justify-center">
-                              {expandedTransaction === sale.transno ? (
-                                <ChevronUp className="h-4 w-4" />
-                              ) : (
-                                <ChevronDown className="h-4 w-4" />
-                              )}
-                            </div>
-                          </TableCell>
                           <TableCell className="font-medium">{sale.transno}</TableCell>
                           <TableCell>{formatDate(sale.salesdate)}</TableCell>
                           <TableCell>{sale.custname || 'N/A'}</TableCell>
                           <TableCell>{sale.empname || 'N/A'}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(sale.totalPrice)}</TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(sale.totalPrice)}</TableCell>
+                          <TableCell>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleTransaction(sale.transno);
+                              }}
+                            >
+                              {expandedTransaction === sale.transno ? 
+                                <ChevronUp className="h-4 w-4" /> : 
+                                <ChevronDown className="h-4 w-4" />
+                              }
+                            </Button>
+                          </TableCell>
                         </TableRow>
                         
                         {expandedTransaction === sale.transno && (
-                          <TableRow className="bg-muted/50">
-                            <TableCell colSpan={6} className="p-0">
-                              <div className="p-4">
-                                <h3 className="text-lg font-bold mb-4 text-center border-b pb-2">TRANSACTION DETAIL</h3>
+                          <TableRow>
+                            <TableCell colSpan={6} className="p-0 border-t">
+                              <div className="bg-muted/20 p-4">
+                                <h4 className="font-semibold text-sm uppercase mb-2 text-muted-foreground">Transaction Details</h4>
                                 <Table>
                                   <TableHeader>
                                     <TableRow>
-                                      <TableHead>Product Description</TableHead>
-                                      <TableHead>Product Code</TableHead>
+                                      <TableHead className="w-[40%]">Product</TableHead>
+                                      <TableHead>Code</TableHead>
                                       <TableHead>Unit</TableHead>
-                                      <TableHead>Quantity</TableHead>
-                                      <TableHead>Unit Price</TableHead>
-                                      <TableHead className="text-right">Total Price</TableHead>
+                                      <TableHead className="text-right">Qty</TableHead>
+                                      <TableHead className="text-right">Price</TableHead>
+                                      <TableHead className="text-right">Amount</TableHead>
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
@@ -305,18 +311,18 @@ const Dashboard = () => {
                                       return (
                                         <TableRow key={`${sale.transno}-${product.prodcode}-${index}`}>
                                           <TableCell>{product.description || 'N/A'}</TableCell>
-                                          <TableCell>{product.prodcode}</TableCell>
+                                          <TableCell className="font-mono text-xs">{product.prodcode}</TableCell>
                                           <TableCell>{product.unit || 'N/A'}</TableCell>
-                                          <TableCell>{product.quantity || 0}</TableCell>
-                                          <TableCell>{product.unitprice ? formatCurrency(product.unitprice) : 'N/A'}</TableCell>
-                                          <TableCell className="text-right">{formatCurrency(productTotal)}</TableCell>
+                                          <TableCell className="text-right">{product.quantity || 0}</TableCell>
+                                          <TableCell className="text-right">{product.unitprice ? formatCurrency(product.unitprice) : 'N/A'}</TableCell>
+                                          <TableCell className="text-right font-medium">{formatCurrency(productTotal)}</TableCell>
                                         </TableRow>
                                       );
                                     })}
-                                    <TableRow className="border-t-2">
+                                    <TableRow>
                                       <TableCell colSpan={4}></TableCell>
-                                      <TableCell className="font-bold text-right">TOTAL PRICE</TableCell>
-                                      <TableCell className="font-bold text-right">{formatCurrency(sale.totalPrice)}</TableCell>
+                                      <TableCell className="text-right font-bold">Total:</TableCell>
+                                      <TableCell className="text-right font-bold">{formatCurrency(sale.totalPrice)}</TableCell>
                                     </TableRow>
                                   </TableBody>
                                 </Table>
