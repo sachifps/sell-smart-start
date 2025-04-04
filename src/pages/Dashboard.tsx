@@ -4,10 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DollarSign, TrendingUp, Users, Package } from 'lucide-react';
+import { DollarSign, TrendingUp, Users, Package, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Checkbox } from '@/components/ui/checkbox';
 
 type SalesWithDetails = {
@@ -249,74 +248,86 @@ const Dashboard = () => {
                 No sales data available
               </div>
             ) : (
-              <div className="space-y-6">
-                {salesData.map((sale) => (
-                  <Collapsible 
-                    key={sale.transno}
-                    open={expandedTransaction === sale.transno}
-                    onOpenChange={() => toggleTransaction(sale.transno)}
-                    className="border rounded-md overflow-hidden"
-                  >
-                    <CollapsibleTrigger asChild>
-                      <div className="bg-slate-50 p-4 cursor-pointer hover:bg-slate-100">
-                        <h3 className="text-lg font-bold mb-4 text-center border-b pb-2">TRANSACTION</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Transaction No</TableHead>
-                              <TableHead>Sales Date</TableHead>
-                              <TableHead>Customer Name</TableHead>
-                              <TableHead>Employee Name</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            <TableRow>
-                              <TableCell className="font-medium">{sale.transno}</TableCell>
-                              <TableCell>{formatDate(sale.salesdate)}</TableCell>
-                              <TableCell>{sale.custname || 'N/A'}</TableCell>
-                              <TableCell>{sale.empname || 'N/A'}</TableCell>
-                            </TableRow>
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <div className="p-4">
-                        <h3 className="text-lg font-bold mb-4 text-center border-b pb-2">TRANSACTION DETAIL</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Product Description</TableHead>
-                              <TableHead>Unit</TableHead>
-                              <TableHead>Quantity</TableHead>
-                              <TableHead>Unit Price</TableHead>
-                              <TableHead>Total Price</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {sale.productDetails.map((product, index) => {
-                              const productTotal = (product.quantity || 0) * (product.unitprice || 0);
-                              return (
-                                <TableRow key={`${sale.transno}-${product.prodcode}-${index}`}>
-                                  <TableCell>{product.description || 'N/A'}</TableCell>
-                                  <TableCell>{product.unit || 'N/A'}</TableCell>
-                                  <TableCell>{product.quantity || 0}</TableCell>
-                                  <TableCell>{product.unitprice ? formatCurrency(product.unitprice) : 'N/A'}</TableCell>
-                                  <TableCell>{formatCurrency(productTotal)}</TableCell>
-                                </TableRow>
-                              );
-                            })}
-                            <TableRow className="border-t-2">
-                              <TableCell colSpan={3}></TableCell>
-                              <TableCell className="font-bold text-right">TOTAL PRICE</TableCell>
-                              <TableCell className="font-bold">{formatCurrency(sale.totalPrice)}</TableCell>
-                            </TableRow>
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                ))}
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10"></TableHead>
+                      <TableHead>Transaction No</TableHead>
+                      <TableHead>Sales Date</TableHead>
+                      <TableHead>Customer Name</TableHead>
+                      <TableHead>Employee Name</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {salesData.map((sale) => (
+                      <React.Fragment key={sale.transno}>
+                        <TableRow 
+                          className="cursor-pointer hover:bg-muted/80"
+                          onClick={() => toggleTransaction(sale.transno)}
+                        >
+                          <TableCell>
+                            <div className="flex h-7 w-7 items-center justify-center">
+                              {expandedTransaction === sale.transno ? (
+                                <ChevronUp className="h-4 w-4" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4" />
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">{sale.transno}</TableCell>
+                          <TableCell>{formatDate(sale.salesdate)}</TableCell>
+                          <TableCell>{sale.custname || 'N/A'}</TableCell>
+                          <TableCell>{sale.empname || 'N/A'}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(sale.totalPrice)}</TableCell>
+                        </TableRow>
+                        
+                        {expandedTransaction === sale.transno && (
+                          <TableRow className="bg-muted/50">
+                            <TableCell colSpan={6} className="p-0">
+                              <div className="p-4">
+                                <h3 className="text-lg font-bold mb-4 text-center border-b pb-2">TRANSACTION DETAIL</h3>
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Product Description</TableHead>
+                                      <TableHead>Product Code</TableHead>
+                                      <TableHead>Unit</TableHead>
+                                      <TableHead>Quantity</TableHead>
+                                      <TableHead>Unit Price</TableHead>
+                                      <TableHead className="text-right">Total Price</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {sale.productDetails.map((product, index) => {
+                                      const productTotal = (product.quantity || 0) * (product.unitprice || 0);
+                                      return (
+                                        <TableRow key={`${sale.transno}-${product.prodcode}-${index}`}>
+                                          <TableCell>{product.description || 'N/A'}</TableCell>
+                                          <TableCell>{product.prodcode}</TableCell>
+                                          <TableCell>{product.unit || 'N/A'}</TableCell>
+                                          <TableCell>{product.quantity || 0}</TableCell>
+                                          <TableCell>{product.unitprice ? formatCurrency(product.unitprice) : 'N/A'}</TableCell>
+                                          <TableCell className="text-right">{formatCurrency(productTotal)}</TableCell>
+                                        </TableRow>
+                                      );
+                                    })}
+                                    <TableRow className="border-t-2">
+                                      <TableCell colSpan={4}></TableCell>
+                                      <TableCell className="font-bold text-right">TOTAL PRICE</TableCell>
+                                      <TableCell className="font-bold text-right">{formatCurrency(sale.totalPrice)}</TableCell>
+                                    </TableRow>
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             )}
           </CardContent>
