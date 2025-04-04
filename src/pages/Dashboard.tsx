@@ -248,6 +248,7 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="rounded-md border">
+                <h3 className="text-center font-bold text-xl py-3 bg-muted/30">Transactions</h3>
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
