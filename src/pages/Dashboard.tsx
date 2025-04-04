@@ -250,12 +250,12 @@ const Dashboard = () => {
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Transaction No</TableHead>
-                      <TableHead>Sales Date</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Employee</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="font-semibold">Transaction No</TableHead>
+                      <TableHead className="font-semibold">Date</TableHead>
+                      <TableHead className="font-semibold">Customer</TableHead>
+                      <TableHead className="font-semibold">Employee</TableHead>
+                      <TableHead className="text-right font-semibold">Total</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
