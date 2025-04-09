@@ -43,20 +43,11 @@ const Login = () => {
         {/* Logo Circle */}
         <div className="bg-white rounded-full p-4 mb-4 shadow-lg z-10">
           <div className="flex items-center justify-center w-20 h-20">
-            <div className="text-center">
-              <div className="text-blue-900 font-bold text-lg">SalesIndex</div>
-              <div className="flex justify-center items-end space-x-1 mt-1">
-                <div className="bg-blue-900 w-2 h-2"></div>
-                <div className="bg-blue-900 w-2 h-3"></div>
-                <div className="bg-blue-900 w-2 h-4"></div>
-                <div className="bg-blue-900 w-2 h-6 relative">
-                  <div className="absolute -top-5 -right-3 transform rotate-45">
-                    <div className="w-5 h-1 bg-blue-900"></div>
-                    <div className="w-1 h-4 bg-blue-900 absolute top-0 right-0 transform -translate-y-3"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <img 
+              src="/lovable-uploads/a53131dd-6f7a-482a-a2e0-2badaa547e39.png" 
+              alt="SalesIndex Logo" 
+              className="w-full h-full object-contain"
+            />
           </div>
         </div>
         
@@ -127,7 +118,7 @@ const Login = () => {
         <div className="mt-8 text-white">
           <span>New User? </span>
           <Link to="/signup" className="font-medium hover:underline">
-            Sign in
+            Sign up
           </Link>
         </div>
       </div>
