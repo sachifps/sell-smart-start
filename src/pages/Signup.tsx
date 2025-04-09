@@ -3,10 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Loader2, UserPlus } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 const Signup = () => {
   const [name, setName] = useState('');
@@ -56,101 +53,96 @@ const Signup = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sales-50 to-sales-100">
-      <div className="w-full max-w-md px-4">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-sales-800">SellSmart</h1>
-          <p className="text-sales-600">Your complete sales management solution</p>
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-blue-700 to-blue-900">
+      <div className="w-full max-w-md flex flex-col items-center">
+        {/* Logo Circle */}
+        <div className="bg-white rounded-full p-4 mb-4 shadow-lg z-10">
+          <div className="flex items-center justify-center w-20 h-20">
+            <img 
+              src="/lovable-uploads/a53131dd-6f7a-482a-a2e0-2badaa547e39.png" 
+              alt="SalesIndex Logo" 
+              className="w-full h-full object-contain"
+            />
+          </div>
         </div>
         
-        <Card className="border-sales-200 shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-2xl text-center">Create an account</CardTitle>
-            <CardDescription className="text-center">
-              Join us to manage all your sales efficiently
-            </CardDescription>
-          </CardHeader>
-          <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="John Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  className="w-full"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm Password</Label>
-                <Input
-                  id="confirm-password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  className="w-full"
-                />
-                {passwordError && (
-                  <p className="text-destructive text-xs mt-1">{passwordError}</p>
-                )}
-              </div>
-            </CardContent>
-            <CardFooter className="flex flex-col space-y-4">
-              <Button 
-                type="submit" 
-                className="w-full bg-sales-600 hover:bg-sales-700" 
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating account...
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Create Account
-                  </>
-                )}
-              </Button>
-              <div className="text-center text-sm">
-                Already have an account?{' '}
-                <Link to="/login" className="text-sales-600 hover:text-sales-800 font-medium">
-                  Sign in
-                </Link>
-              </div>
-            </CardFooter>
+        {/* Form Card */}
+        <div className="bg-blue-500/30 backdrop-blur-sm rounded-3xl w-full px-10 pt-16 pb-10 shadow-xl relative -mt-10">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label htmlFor="name" className="block text-white mb-1">Full Name:</label>
+              <input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="w-full bg-transparent border-b border-white/70 focus:border-white outline-none text-white py-1 px-0"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="email" className="block text-white mb-1">Email:</label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full bg-transparent border-b border-white/70 focus:border-white outline-none text-white py-1 px-0"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="password" className="block text-white mb-1">Password:</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full bg-transparent border-b border-white/70 focus:border-white outline-none text-white py-1 px-0"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="confirm-password" className="block text-white mb-1">Confirm Password:</label>
+              <input
+                id="confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                className="w-full bg-transparent border-b border-white/70 focus:border-white outline-none text-white py-1 px-0"
+              />
+              {passwordError && (
+                <p className="text-red-200 text-sm mt-1">{passwordError}</p>
+              )}
+            </div>
+            
+            <Button 
+              type="submit" 
+              disabled={isSubmitting}
+              className="w-full bg-blue-400/50 backdrop-blur-sm hover:bg-blue-400/70 transition-colors text-white font-medium py-2 px-4 rounded-full shadow-lg text-lg h-auto mt-8"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Creating account...
+                </>
+              ) : 'Sign up'}
+            </Button>
           </form>
-        </Card>
+          
+          <div className="text-center mt-6">
+            <p className="text-white">
+              Already have an account?{' '}
+              <Link to="/login" className="text-white hover:underline font-medium">
+                Log in
+              </Link>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
