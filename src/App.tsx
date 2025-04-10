@@ -12,10 +12,6 @@ import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
-import Transactions from "./pages/Transactions";
-import SalesTransactions from "./pages/SalesTransactions";
-import Reports from "./pages/Reports";
-import Users from "./pages/Users";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,38 +33,6 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Dashboard />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/transactions" 
-              element={
-                <ProtectedRoute>
-                  <Transactions />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/sales-transactions" 
-              element={
-                <ProtectedRoute>
-                  <SalesTransactions />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/reports" 
-              element={
-                <ProtectedRoute>
-                  <Reports />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/users" 
-              element={
-                <ProtectedRoute>
-                  <Users />
                 </ProtectedRoute>
               } 
             />

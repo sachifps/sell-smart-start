@@ -31,29 +31,6 @@ const Dashboard = () => {
   const [salesData, setSalesData] = useState<SalesWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedTransaction, setExpandedTransaction] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    const checkAdminStatus = async () => {
-      if (user) {
-        try {
-          const { data, error } = await supabase
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', user.id)
-            .single();
-          
-          if (data && data.role === 'admin') {
-            setIsAdmin(true);
-          }
-        } catch (error) {
-          console.error('Error checking admin status:', error);
-        }
-      }
-    };
-    
-    checkAdminStatus();
-  }, [user]);
 
   useEffect(() => {
     const fetchSalesData = async () => {
@@ -184,17 +161,10 @@ const Dashboard = () => {
       <header className="bg-white border-b border-border shadow-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-bold text-primary">SellSmart</h1>
+            <h1 className="text-2xl font-bold text-sales-800">SellSmart</h1>
           </div>
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" className="bg-muted">Dashboard</Button>
-            <Button variant="ghost" onClick={() => navigate('/sales-transactions')}>Sales</Button>
-            <Button variant="ghost" onClick={() => navigate('/transactions')}>Transactions</Button>
-            <Button variant="ghost" onClick={() => navigate('/reports')}>Reports</Button>
-            {isAdmin && (
-              <Button variant="ghost" onClick={() => navigate('/users')}>Users</Button>
-            )}
-            <span className="text-sm text-muted-foreground ml-4">
+            <span className="text-sm text-muted-foreground">
               Welcome, {user?.user_metadata?.name || user?.email}
             </span>
             <Button variant="outline" onClick={handleLogout}>Logout</Button>
@@ -206,7 +176,7 @@ const Dashboard = () => {
         <h2 className="text-2xl font-bold mb-6">Dashboard</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="border-l-4 border-l-primary">
+          <Card className="border-l-4 border-l-sales-500">
             <CardContent className="p-6 flex justify-between items-center">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Sales</p>
@@ -214,7 +184,7 @@ const Dashboard = () => {
                   {formatCurrency(salesData.reduce((sum, sale) => sum + sale.totalPrice, 0))}
                 </p>
               </div>
-              <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center text-primary">
+              <div className="h-12 w-12 bg-sales-100 rounded-full flex items-center justify-center text-sales-500">
                 <DollarSign size={24} />
               </div>
             </CardContent>
@@ -265,17 +235,12 @@ const Dashboard = () => {
         
         <Card>
           <CardHeader className="pb-2">
-            <div className="flex justify-between items-center">
-              <CardTitle className="text-xl font-medium">Sales Transactions</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => navigate('/sales-transactions')}>
-                View All
-              </Button>
-            </div>
+            <CardTitle className="text-xl font-medium">Sales Transactions</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="flex justify-center p-6">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-sales-600"></div>
               </div>
             ) : salesData.length === 0 ? (
               <div className="text-center p-6 text-muted-foreground">
@@ -296,7 +261,7 @@ const Dashboard = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {salesData.slice(0, 5).map((sale) => (
+                    {salesData.map((sale) => (
                       <React.Fragment key={sale.transno}>
                         <TableRow 
                           className="cursor-pointer hover:bg-muted/50"
