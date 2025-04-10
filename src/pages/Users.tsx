@@ -63,7 +63,7 @@ const Users = () => {
             .from('user_roles')
             .select('role')
             .eq('user_id', user.id)
-            .single() as { data: { role: UserRole } | null; error: any };
+            .single();
           
           if (data && data.role === 'admin') {
             setIsAdmin(true);
@@ -91,7 +91,7 @@ const Users = () => {
         const { data: usersData, error: usersError } = await supabase
           .from('profiles')
           .select('*, user_roles(role)')
-          .order('created_at', { ascending: false }) as { data: any[] | null; error: any };
+          .order('created_at', { ascending: false });
         
         if (usersError) throw usersError;
         
@@ -161,7 +161,7 @@ const Users = () => {
       const { data: existingRole, error: checkError } = await supabase
         .from('user_roles')
         .select()
-        .eq('user_id', userId) as { data: any[] | null; error: any };
+        .eq('user_id', userId);
       
       if (checkError) throw checkError;
       

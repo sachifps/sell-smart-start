@@ -58,7 +58,7 @@ const Transactions = () => {
             .from('user_roles')
             .select('role')
             .eq('user_id', user.id)
-            .single() as { data: { role: UserRole } | null; error: any };
+            .single();
           
           if (data && data.role === 'admin') {
             setIsAdmin(true);
@@ -81,10 +81,10 @@ const Transactions = () => {
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
-        .order('created_at', { ascending: false }) as { data: Transaction[] | null, error: any };
+        .order('created_at', { ascending: false });
       
       if (error) throw error;
-      return data || [];
+      return (data || []) as Transaction[];
     },
   });
 
@@ -93,17 +93,15 @@ const Transactions = () => {
       const amount = data.quantity * data.price;
       const { data: newData, error } = await supabase
         .from('transactions')
-        .insert([
-          { 
-            product_code: data.product_code,
-            product_name: data.product_name, 
-            unit: data.unit,
-            quantity: data.quantity,
-            price: data.price,
-            amount
-          }
-        ])
-        .select() as { data: Transaction[] | null, error: any };
+        .insert([{ 
+          product_code: data.product_code,
+          product_name: data.product_name, 
+          unit: data.unit,
+          quantity: data.quantity,
+          price: data.price,
+          amount
+        }])
+        .select();
       
       if (error) throw error;
       return newData;
@@ -141,7 +139,7 @@ const Transactions = () => {
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
-        .select() as { data: Transaction[] | null, error: any };
+        .select();
       
       if (error) throw error;
       return updatedData;

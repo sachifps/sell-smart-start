@@ -34,10 +34,10 @@ const Reports = () => {
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
-        .order('created_at', { ascending: false }) as { data: Transaction[] | null, error: any };
+        .order('created_at', { ascending: false });
       
       if (error) throw error;
-      return data || [];
+      return (data || []) as Transaction[];
     },
   });
 
@@ -48,7 +48,7 @@ const Reports = () => {
       const { data, error } = await supabase
         .from('transaction_history')
         .select('*, profiles:user_id(email)')
-        .order('created_at', { ascending: false }) as { data: any[] | null, error: any };
+        .order('created_at', { ascending: false });
       
       if (error) throw error;
       
