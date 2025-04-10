@@ -13,6 +13,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
+import SalesTransactions from "./pages/SalesTransactions";
 import Reports from "./pages/Reports";
 import Users from "./pages/Users";
 import NotFound from "./pages/NotFound";
@@ -44,6 +45,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Transactions />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/sales-transactions" 
+              element={
+                <ProtectedRoute>
+                  <SalesTransactions />
                 </ProtectedRoute>
               } 
             />
