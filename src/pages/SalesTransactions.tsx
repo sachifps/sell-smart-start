@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -51,6 +50,7 @@ type SalesDetail = {
   description: string | null;
   unit: string | null;
   unitprice: number | null;
+  customUnit?: string;
 };
 
 type SalesTransaction = {
@@ -95,6 +95,10 @@ const SalesTransactions = () => {
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [productQuantity, setProductQuantity] = useState<number>(1);
+  
+  // New state for unit editing
+  const [editingProductIndex, setEditingProductIndex] = useState<number | null>(null);
+  const [editingUnit, setEditingUnit] = useState<string>('');
 
   useEffect(() => {
     fetchSalesData();
@@ -306,6 +310,8 @@ const SalesTransactions = () => {
     setShowAddProduct(false);
     setSelectedProduct('');
     setProductQuantity(1);
+    setEditingProductIndex(null);
+    setEditingUnit('');
   };
 
   const handleAddProduct = () => {
@@ -358,6 +364,26 @@ const SalesTransactions = () => {
     return transactionProducts.reduce((sum, product) => {
       return sum + ((product.quantity || 0) * (product.unitprice || 0));
     }, 0);
+  };
+
+  const startEditingUnit = (index: number, currentUnit: string | null) => {
+    setEditingProductIndex(index);
+    setEditingUnit(currentUnit || '');
+  };
+
+  const saveEditedUnit = () => {
+    if (editingProductIndex !== null) {
+      const updatedProducts = [...transactionProducts];
+      updatedProducts[editingProductIndex].customUnit = editingUnit;
+      setTransactionProducts(updatedProducts);
+      setEditingProductIndex(null);
+      setEditingUnit('');
+    }
+  };
+
+  const cancelEditingUnit = () => {
+    setEditingProductIndex(null);
+    setEditingUnit('');
   };
 
   const handleSaveTransaction = async () => {
@@ -420,6 +446,19 @@ const SalesTransactions = () => {
         .insert(salesDetailsToInsert);
 
       if (detailsError) throw detailsError;
+
+      for (const product of transactionProducts) {
+        if (product.customUnit && product.customUnit !== product.unit) {
+          const { error: updateProductError } = await supabase
+            .from('product')
+            .update({ unit: product.customUnit })
+            .eq('prodcode', product.prodcode);
+
+          if (updateProductError) {
+            console.error('Error updating product unit:', updateProductError);
+          }
+        }
+      }
 
       toast({
         title: isEditMode ? "Transaction Updated" : "Transaction Created",
@@ -631,7 +670,7 @@ const SalesTransactions = () => {
                                         <TableRow key={`${sale.transno}-${product.prodcode}-${index}`}>
                                           <TableCell>{product.description || 'N/A'}</TableCell>
                                           <TableCell className="font-mono text-xs">{product.prodcode}</TableCell>
-                                          <TableCell>{product.unit || 'N/A'}</TableCell>
+                                          <TableCell>{product.customUnit || product.unit || 'N/A'}</TableCell>
                                           <TableCell className="text-right">{product.quantity || 0}</TableCell>
                                           <TableCell className="text-right">{product.unitprice ? formatCurrency(product.unitprice) : 'N/A'}</TableCell>
                                           <TableCell className="text-right font-medium">{formatCurrency(productTotal)}</TableCell>
@@ -778,16 +817,64 @@ const SalesTransactions = () => {
                       <TableHead className="text-right">Quantity</TableHead>
                       <TableHead className="text-right">Unit Price</TableHead>
                       <TableHead className="text-right">Total</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
+                      <TableHead className="w-[100px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {transactionProducts.map((product, index) => {
                       const productTotal = (product.quantity || 0) * (product.unitprice || 0);
+                      const isEditing = editingProductIndex === index;
+                      
                       return (
                         <TableRow key={`product-${index}`}>
                           <TableCell>{product.description || product.prodcode}</TableCell>
-                          <TableCell>{product.unit || 'N/A'}</TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <div className="flex space-x-2">
+                                <Input
+                                  value={editingUnit}
+                                  onChange={(e) => setEditingUnit(e.target.value)}
+                                  className="w-20 h-8"
+                                />
+                                <div className="flex space-x-1">
+                                  <Button 
+                                    type="button" 
+                                    size="icon" 
+                                    variant="ghost" 
+                                    className="h-8 w-8"
+                                    onClick={saveEditedUnit}
+                                  >
+                                    <span className="sr-only">Save</span>
+                                    ✓
+                                  </Button>
+                                  <Button 
+                                    type="button" 
+                                    size="icon" 
+                                    variant="ghost" 
+                                    className="h-8 w-8"
+                                    onClick={cancelEditingUnit}
+                                  >
+                                    <span className="sr-only">Cancel</span>
+                                    ✕
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center space-x-2">
+                                <span>{product.customUnit || product.unit || 'N/A'}</span>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 p-0"
+                                  onClick={() => startEditingUnit(index, product.customUnit || product.unit)}
+                                >
+                                  <Edit className="h-3 w-3" />
+                                  <span className="sr-only">Edit unit</span>
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">{product.quantity}</TableCell>
                           <TableCell className="text-right">{product.unitprice ? formatCurrency(product.unitprice) : 'N/A'}</TableCell>
                           <TableCell className="text-right">{formatCurrency(productTotal)}</TableCell>
