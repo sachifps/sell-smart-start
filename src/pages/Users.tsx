@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PlusCircle, UserPlus, UserMinus, UserCog, CheckCircle, Save, X, AlertCircle } from 'lucide-react';
+import { UserPlus, UserMinus, UserCog, CheckCircle, Save, X, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -32,18 +32,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-
-interface User {
-  id: string;
-  email: string;
-  role: 'admin' | 'user';
-  created_at: string;
-}
+import { User, UserRole } from '@/types/supabase';
 
 interface NewUserForm {
   email: string;
   password: string;
-  role: 'admin' | 'user';
+  role: UserRole;
 }
 
 const Users = () => {
@@ -58,22 +52,28 @@ const Users = () => {
     password: '',
     role: 'user',
   });
-  const [editingRole, setEditingRole] = useState<{id: string, role: 'admin' | 'user'} | null>(null);
+  const [editingRole, setEditingRole] = useState<{id: string, role: UserRole} | null>(null);
 
   // Check if current user is admin
   React.useEffect(() => {
     const checkUserRole = async () => {
       if (user) {
-        const { data, error } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .single();
-        
-        if (data && data.role === 'admin') {
-          setIsAdmin(true);
-        } else {
-          // Redirect non-admin users away from this page
+        try {
+          const { data, error } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id)
+            .single() as { data: { role: UserRole } | null; error: any };
+          
+          if (data && data.role === 'admin') {
+            setIsAdmin(true);
+          } else {
+            // Redirect non-admin users away from this page
+            window.location.href = '/dashboard';
+          }
+        } catch (error) {
+          console.error("Error checking user role:", error);
+          // Redirect on error
           window.location.href = '/dashboard';
         }
       }
@@ -86,22 +86,27 @@ const Users = () => {
   const { data: users, isLoading } = useQuery({
     queryKey: ['users'],
     queryFn: async () => {
-      // We need to join user data with roles
-      const { data: usersData, error: usersError } = await supabase
-        .from('profiles')
-        .select('*, user_roles(role)')
-        .order('created_at', { ascending: false });
-      
-      if (usersError) throw usersError;
-      
-      return usersData.map((userData: any) => ({
-        id: userData.id,
-        email: userData.email,
-        role: userData.user_roles && userData.user_roles.length > 0 
-          ? userData.user_roles[0].role 
-          : 'user',
-        created_at: userData.created_at
-      }));
+      try {
+        // We need to join user data with roles
+        const { data: usersData, error: usersError } = await supabase
+          .from('profiles')
+          .select('*, user_roles(role)')
+          .order('created_at', { ascending: false }) as { data: any[] | null; error: any };
+        
+        if (usersError) throw usersError;
+        
+        return (usersData || []).map((userData: any) => ({
+          id: userData.id,
+          email: userData.email,
+          role: userData.user_roles && userData.user_roles.length > 0 
+            ? userData.user_roles[0].role 
+            : 'user',
+          created_at: userData.created_at
+        })) as User[];
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        return [];
+      }
     },
     enabled: isAdmin, // Only run query if user is admin
   });
@@ -143,7 +148,7 @@ const Users = () => {
     onError: (error) => {
       toast({
         title: "Error creating user",
-        description: error.message,
+        description: error instanceof Error ? error.message : "An unknown error occurred",
         variant: "destructive",
       });
     }
@@ -151,12 +156,12 @@ const Users = () => {
 
   // Update user role mutation
   const updateUserRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string, role: 'admin' | 'user' }) => {
+    mutationFn: async ({ userId, role }: { userId: string, role: UserRole }) => {
       // First, check if role exists
       const { data: existingRole, error: checkError } = await supabase
         .from('user_roles')
         .select()
-        .eq('user_id', userId);
+        .eq('user_id', userId) as { data: any[] | null; error: any };
       
       if (checkError) throw checkError;
       
@@ -195,7 +200,7 @@ const Users = () => {
     onError: (error) => {
       toast({
         title: "Error updating role",
-        description: error.message,
+        description: error instanceof Error ? error.message : "An unknown error occurred",
         variant: "destructive",
       });
     }
@@ -209,7 +214,15 @@ const Users = () => {
         throw new Error("You cannot delete your own account");
       }
       
-      // Delete user from supabase auth (this will cascade to user_roles)
+      // Delete user's role and profile
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId);
+      
+      if (roleError) throw roleError;
+        
+      // Then delete the user from auth
       const { error } = await supabase.auth.admin.deleteUser(userId);
       
       if (error) throw error;
@@ -226,7 +239,7 @@ const Users = () => {
     onError: (error) => {
       toast({
         title: "Error deleting user",
-        description: error.message,
+        description: error instanceof Error ? error.message : "An unknown error occurred",
         variant: "destructive",
       });
     }
@@ -243,7 +256,7 @@ const Users = () => {
   const handleNewUserRoleChange = (value: string) => {
     setNewUserForm(prev => ({
       ...prev,
-      role: value as 'admin' | 'user'
+      role: value as UserRole
     }));
   };
 
@@ -268,7 +281,7 @@ const Users = () => {
     });
   };
 
-  const handleEditRole = (userId: string, currentRole: 'admin' | 'user') => {
+  const handleEditRole = (userId: string, currentRole: UserRole) => {
     setEditingRole({ id: userId, role: currentRole });
   };
 
@@ -404,7 +417,7 @@ const Users = () => {
                             value={editingRole.role}
                             onValueChange={(value) => setEditingRole({
                               ...editingRole,
-                              role: value as 'admin' | 'user'
+                              role: value as UserRole
                             })}
                           >
                             <SelectTrigger className="w-[100px]">

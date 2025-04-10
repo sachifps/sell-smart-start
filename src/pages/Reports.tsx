@@ -21,33 +21,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-
-interface Transaction {
-  id: string;
-  product_code: string;
-  product_name: string;
-  unit: string;
-  quantity: number;
-  price: number;
-  amount: number;
-  created_at: string;
-  updated_at: string;
-}
-
-interface TransactionHistory {
-  id: string;
-  transaction_id: string;
-  product_code: string;
-  product_name: string;
-  unit: string;
-  quantity: number;
-  price: number;
-  amount: number;
-  action: 'create' | 'update' | 'delete';
-  created_at: string;
-  user_id: string;
-  user_email: string;
-}
+import { Transaction, TransactionHistory } from '@/types/supabase';
 
 const Reports = () => {
   const { toast } = useToast();
@@ -60,10 +34,10 @@ const Reports = () => {
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false }) as { data: Transaction[] | null, error: any };
       
       if (error) throw error;
-      return data as Transaction[];
+      return data || [];
     },
   });
 
@@ -74,10 +48,11 @@ const Reports = () => {
       const { data, error } = await supabase
         .from('transaction_history')
         .select('*, profiles:user_id(email)')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false }) as { data: any[] | null, error: any };
       
       if (error) throw error;
-      return data.map((item: any) => ({
+      
+      return (data || []).map((item: any) => ({
         ...item,
         user_email: item.profiles?.email || 'Unknown'
       })) as TransactionHistory[];

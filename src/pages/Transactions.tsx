@@ -23,18 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
-
-interface Transaction {
-  id: string;
-  product_code: string;
-  product_name: string;
-  unit: string;
-  quantity: number;
-  price: number;
-  amount: number;
-  created_at: string;
-  updated_at: string;
-}
+import { Transaction, UserRole } from '@/types/supabase';
 
 interface TransactionFormData {
   product_code: string;
@@ -64,15 +53,20 @@ const Transactions = () => {
   useEffect(() => {
     const checkUserRole = async () => {
       if (user) {
-        const { data, error } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .single();
-        
-        if (data && data.role === 'admin') {
-          setIsAdmin(true);
-        } else {
+        try {
+          const { data, error } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id)
+            .single() as { data: { role: UserRole } | null; error: any };
+          
+          if (data && data.role === 'admin') {
+            setIsAdmin(true);
+          } else {
+            setIsAdmin(false);
+          }
+        } catch (error) {
+          console.error("Error checking user role:", error);
           setIsAdmin(false);
         }
       }
@@ -87,10 +81,10 @@ const Transactions = () => {
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false }) as { data: Transaction[] | null, error: any };
       
       if (error) throw error;
-      return data as Transaction[];
+      return data || [];
     },
   });
 
@@ -109,7 +103,7 @@ const Transactions = () => {
             amount
           }
         ])
-        .select();
+        .select() as { data: Transaction[] | null, error: any };
       
       if (error) throw error;
       return newData;
@@ -126,7 +120,7 @@ const Transactions = () => {
     onError: (error) => {
       toast({
         title: "Error adding transaction",
-        description: error.message,
+        description: error instanceof Error ? error.message : "An unknown error occurred",
         variant: "destructive",
       });
     }
@@ -147,7 +141,7 @@ const Transactions = () => {
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
-        .select();
+        .select() as { data: Transaction[] | null, error: any };
       
       if (error) throw error;
       return updatedData;
@@ -164,7 +158,7 @@ const Transactions = () => {
     onError: (error) => {
       toast({
         title: "Error updating transaction",
-        description: error.message,
+        description: error instanceof Error ? error.message : "An unknown error occurred",
         variant: "destructive",
       });
     }
@@ -189,7 +183,7 @@ const Transactions = () => {
     onError: (error) => {
       toast({
         title: "Error deleting transaction",
-        description: error.message,
+        description: error instanceof Error ? error.message : "An unknown error occurred",
         variant: "destructive",
       });
     }
@@ -229,8 +223,8 @@ const Transactions = () => {
       product_code: transaction.product_code,
       product_name: transaction.product_name,
       unit: transaction.unit,
-      quantity: transaction.quantity,
-      price: transaction.price,
+      quantity: Number(transaction.quantity),
+      price: Number(transaction.price),
     });
   };
 
@@ -457,8 +451,8 @@ const Transactions = () => {
                           <TableCell>{transaction.product_name}</TableCell>
                           <TableCell>{transaction.unit}</TableCell>
                           <TableCell className="text-right">{transaction.quantity}</TableCell>
-                          <TableCell className="text-right">{transaction.price.toFixed(2)}</TableCell>
-                          <TableCell className="text-right">{transaction.amount.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{Number(transaction.price).toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{Number(transaction.amount).toFixed(2)}</TableCell>
                           {isAdmin && (
                             <TableCell className="text-right">
                               <div className="flex justify-end space-x-2">
