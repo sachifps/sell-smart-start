@@ -161,9 +161,11 @@ const Dashboard = () => {
       <header className="bg-white border-b border-border shadow-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-bold text-sales-800">SellSmart</h1>
+            <h1 className="text-2xl font-bold text-primary">SellSmart</h1>
           </div>
           <div className="flex items-center space-x-4">
+            <Button variant="ghost" onClick={() => navigate('/dashboard')} className="font-semibold text-primary">Dashboard</Button>
+            <Button variant="ghost" onClick={() => navigate('/sales-transactions')}>Sales</Button>
             <span className="text-sm text-muted-foreground">
               Welcome, {user?.user_metadata?.name || user?.email}
             </span>
@@ -176,7 +178,7 @@ const Dashboard = () => {
         <h2 className="text-2xl font-bold mb-6">Dashboard</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="border-l-4 border-l-sales-500">
+          <Card className="border-l-4 border-l-primary">
             <CardContent className="p-6 flex justify-between items-center">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Sales</p>
@@ -184,7 +186,7 @@ const Dashboard = () => {
                   {formatCurrency(salesData.reduce((sum, sale) => sum + sale.totalPrice, 0))}
                 </p>
               </div>
-              <div className="h-12 w-12 bg-sales-100 rounded-full flex items-center justify-center text-sales-500">
+              <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center text-primary">
                 <DollarSign size={24} />
               </div>
             </CardContent>
@@ -234,13 +236,16 @@ const Dashboard = () => {
         </div>
         
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-2 flex justify-between items-center">
             <CardTitle className="text-xl font-medium">Sales Transactions</CardTitle>
+            <Button variant="outline" size="sm" onClick={() => navigate('/sales-transactions')}>
+              View All
+            </Button>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="flex justify-center p-6">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-sales-600"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
               </div>
             ) : salesData.length === 0 ? (
               <div className="text-center p-6 text-muted-foreground">
@@ -248,7 +253,6 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="rounded-md border">
-                <h3 className="text-center font-bold text-xl py-3 bg-muted/30">Transactions</h3>
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
@@ -261,7 +265,8 @@ const Dashboard = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {salesData.map((sale) => (
+                    {/* Only show the first 5 transactions on dashboard */}
+                    {salesData.slice(0, 5).map((sale) => (
                       <React.Fragment key={sale.transno}>
                         <TableRow 
                           className="cursor-pointer hover:bg-muted/50"
