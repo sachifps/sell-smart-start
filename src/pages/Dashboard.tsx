@@ -37,7 +37,7 @@ const Dashboard = () => {
       try {
         setIsLoading(true);
         
-        // Fetch sales data with related customer and employee info
+        // Fetch sales data with related customer and employee info, sorted by most recent
         const { data: salesData, error: salesError } = await supabase
           .from('sales')
           .select(`
@@ -47,7 +47,8 @@ const Dashboard = () => {
             empno,
             customer:custno(custname),
             employee:empno(firstname, lastname)
-          `);
+          `)
+          .order('transno', { ascending: false }); // Order by newest transactions first
         
         if (salesError) throw salesError;
         
@@ -237,7 +238,7 @@ const Dashboard = () => {
         
         <Card>
           <CardHeader className="pb-2 flex justify-between items-center">
-            <CardTitle className="text-xl font-medium">Sales Transactions</CardTitle>
+            <CardTitle className="text-xl font-medium">Recent Transactions</CardTitle>
             <Button variant="outline" size="sm" onClick={() => navigate('/sales-transactions')}>
               View All
             </Button>
@@ -265,7 +266,7 @@ const Dashboard = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {/* Only show the first 5 transactions on dashboard */}
+                    {/* Show the latest 5 transactions on dashboard */}
                     {salesData.slice(0, 5).map((sale) => (
                       <React.Fragment key={sale.transno}>
                         <TableRow 

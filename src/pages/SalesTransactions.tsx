@@ -73,30 +73,25 @@ const SalesTransactions = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [expandedTransaction, setExpandedTransaction] = useState<string | null>(null);
   
-  // For add/edit dialog
   const [isTransactionDialogOpen, setIsTransactionDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [currentTransaction, setCurrentTransaction] = useState<SalesTransaction | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   
-  // For form inputs
   const [transactionDate, setTransactionDate] = useState<string>('');
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
   const [transactionProducts, setTransactionProducts] = useState<SalesDetail[]>([]);
   const [nextTransNo, setNextTransNo] = useState('');
   
-  // References for dropdown options
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
 
-  // For adding products to transaction
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [productQuantity, setProductQuantity] = useState<number>(1);
   
-  // New state for unit editing
   const [editingProductIndex, setEditingProductIndex] = useState<number | null>(null);
   const [editingUnit, setEditingUnit] = useState<string>('');
 
@@ -107,7 +102,6 @@ const SalesTransactions = () => {
 
   const fetchReferenceData = async () => {
     try {
-      // Fetch customers
       const { data: customersData, error: customersError } = await supabase
         .from('customer')
         .select('custno, custname');
@@ -115,7 +109,6 @@ const SalesTransactions = () => {
       if (customersError) throw customersError;
       setCustomers(customersData || []);
       
-      // Fetch employees
       const { data: employeesData, error: employeesError } = await supabase
         .from('employee')
         .select('empno, firstname, lastname');
@@ -126,14 +119,12 @@ const SalesTransactions = () => {
         fullname: `${emp.firstname || ''} ${emp.lastname || ''}`.trim()
       })) || []);
       
-      // Fetch products with latest prices
       const { data: productsData, error: productsError } = await supabase
         .from('product')
         .select('prodcode, description, unit');
       
       if (productsError) throw productsError;
       
-      // Get the latest price for each product
       const productsWithPrices = await Promise.all(
         (productsData || []).map(async (product) => {
           const { data: priceData, error: priceError } = await supabase
@@ -154,7 +145,6 @@ const SalesTransactions = () => {
       
       setProducts(productsWithPrices);
       
-      // Generate next transaction number
       const { data: lastTrans, error: lastTransError } = await supabase
         .from('sales')
         .select('transno')
@@ -185,7 +175,6 @@ const SalesTransactions = () => {
     try {
       setIsLoading(true);
       
-      // Fetch sales data with related customer and employee info
       const { data: salesData, error: salesError } = await supabase
         .from('sales')
         .select(`
@@ -195,7 +184,8 @@ const SalesTransactions = () => {
           empno,
           customer:custno(custname),
           employee:empno(firstname, lastname)
-        `);
+        `)
+        .order('transno', { ascending: false });
       
       if (salesError) throw salesError;
       
@@ -205,7 +195,6 @@ const SalesTransactions = () => {
         return;
       }
       
-      // For each sales record, fetch its product details with product info and price
       const salesWithDetails = await Promise.all(
         salesData.map(async (sale) => {
           const { data: detailsData, error: detailsError } = await supabase
@@ -219,10 +208,8 @@ const SalesTransactions = () => {
           
           if (detailsError) throw detailsError;
           
-          // For each product, get the latest price from price history
           const productDetailsWithPrice = await Promise.all(
             (detailsData || []).map(async (detail) => {
-              // Get the most recent price before or on the sale date
               const { data: priceData, error: priceError } = await supabase
                 .from('pricehist')
                 .select('unitprice')
@@ -235,17 +222,23 @@ const SalesTransactions = () => {
               
               const unitprice = priceData && priceData.length > 0 ? priceData[0].unitprice : null;
               
+              const { data: productData } = await supabase
+                .from('product')
+                .select('unit')
+                .eq('prodcode', detail.prodcode)
+                .single();
+                
               return {
                 prodcode: detail.prodcode,
                 quantity: detail.quantity,
                 description: detail.product?.description,
-                unit: detail.product?.unit,
-                unitprice
+                unit: productData?.unit || detail.product?.unit,
+                unitprice,
+                customUnit: productData?.unit !== detail.product?.unit ? productData?.unit : undefined
               };
             })
           );
           
-          // Calculate total price for all products in this transaction
           const totalPrice = productDetailsWithPrice.reduce((sum, product) => {
             const productTotal = (product.quantity || 0) * (product.unitprice || 0);
             return sum + productTotal;
@@ -281,14 +274,45 @@ const SalesTransactions = () => {
     setIsEditMode(false);
     setCurrentTransaction(null);
     resetForm();
-    setIsTransactionDialogOpen(true);
+    
+    fetchLatestTransactionNumber().then(() => {
+      setIsTransactionDialogOpen(true);
+    });
+  };
+
+  const fetchLatestTransactionNumber = async () => {
+    try {
+      const { data: lastTrans, error: lastTransError } = await supabase
+        .from('sales')
+        .select('transno')
+        .order('transno', { ascending: false })
+        .limit(1);
+      
+      if (lastTransError) throw lastTransError;
+      
+      let nextNumber = '1001';
+      if (lastTrans && lastTrans.length > 0) {
+        const lastNumber = parseInt(lastTrans[0].transno);
+        nextNumber = (lastNumber + 1).toString();
+      }
+      
+      setNextTransNo(nextNumber);
+      return nextNumber;
+    } catch (error) {
+      console.error('Error fetching latest transaction number:', error);
+      toast({
+        title: "Error",
+        description: "Failed to generate transaction number",
+        variant: "destructive"
+      });
+      return null;
+    }
   };
 
   const handleEditTransaction = (transaction: SalesTransaction) => {
     setIsEditMode(true);
     setCurrentTransaction(transaction);
     
-    // Populate form with transaction data
     setTransactionDate(transaction.salesdate || '');
     setSelectedCustomer(transaction.custno || '');
     setSelectedEmployee(transaction.empno || '');
@@ -327,17 +351,14 @@ const SalesTransactions = () => {
     const product = products.find(p => p.prodcode === selectedProduct);
     if (!product) return;
 
-    // Check if product already exists in the transaction
     const existingProductIndex = transactionProducts.findIndex(p => p.prodcode === selectedProduct);
 
     if (existingProductIndex >= 0) {
-      // Update quantity if product already exists
       const updatedProducts = [...transactionProducts];
       const existingQuantity = updatedProducts[existingProductIndex].quantity || 0;
       updatedProducts[existingProductIndex].quantity = existingQuantity + productQuantity;
       setTransactionProducts(updatedProducts);
     } else {
-      // Add new product
       setTransactionProducts([
         ...transactionProducts,
         {
@@ -350,7 +371,6 @@ const SalesTransactions = () => {
       ]);
     }
 
-    // Reset product selection
     setSelectedProduct('');
     setProductQuantity(1);
     setShowAddProduct(false);
@@ -399,9 +419,7 @@ const SalesTransactions = () => {
 
       const transno = isEditMode ? currentTransaction!.transno : nextTransNo;
 
-      // Insert or update sales record
       if (isEditMode) {
-        // Update sales record
         const { error: updateError } = await supabase
           .from('sales')
           .update({
@@ -413,7 +431,6 @@ const SalesTransactions = () => {
 
         if (updateError) throw updateError;
 
-        // Delete existing sales details
         const { error: deleteError } = await supabase
           .from('salesdetail')
           .delete()
@@ -421,7 +438,6 @@ const SalesTransactions = () => {
 
         if (deleteError) throw deleteError;
       } else {
-        // Insert new sales record
         const { error: insertError } = await supabase
           .from('sales')
           .insert({
@@ -434,7 +450,6 @@ const SalesTransactions = () => {
         if (insertError) throw insertError;
       }
 
-      // Insert sales details
       const salesDetailsToInsert = transactionProducts.map(product => ({
         transno,
         prodcode: product.prodcode,
@@ -467,14 +482,12 @@ const SalesTransactions = () => {
           : `Transaction #${transno} has been created successfully`,
       });
 
-      // Refresh data
-      fetchSalesData();
+      await fetchSalesData();
       setIsTransactionDialogOpen(false);
       resetForm();
 
-      // Generate new transaction number if it was a new transaction
       if (!isEditMode) {
-        fetchReferenceData();
+        await fetchLatestTransactionNumber();
       }
     } catch (error) {
       console.error('Error saving transaction:', error);
@@ -490,7 +503,6 @@ const SalesTransactions = () => {
     if (!currentTransaction) return;
 
     try {
-      // First delete details (child records)
       const { error: detailsError } = await supabase
         .from('salesdetail')
         .delete()
@@ -498,7 +510,6 @@ const SalesTransactions = () => {
 
       if (detailsError) throw detailsError;
 
-      // Then delete the main record
       const { error: salesError } = await supabase
         .from('sales')
         .delete()
@@ -698,7 +709,6 @@ const SalesTransactions = () => {
         </Card>
       </main>
 
-      {/* Add/Edit Transaction Dialog */}
       <Dialog open={isTransactionDialogOpen} onOpenChange={setIsTransactionDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -921,7 +931,6 @@ const SalesTransactions = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
