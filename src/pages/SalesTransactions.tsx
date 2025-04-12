@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { ChevronDown, ChevronUp, Edit, Plus, Trash2, Search, ArrowUpDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -24,14 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
+
+import { AppHeader } from '@/components/app-header';
 
 type Customer = {
   custno: string;
@@ -77,7 +71,7 @@ type SortOrder = 'asc' | 'desc';
 
 const SalesTransactions = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   
   const [salesData, setSalesData] = useState<SalesTransaction[]>([]);
@@ -739,20 +733,7 @@ const SalesTransactions = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="bg-white border-b border-border shadow-sm">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-bold text-primary">SellSmart</h1>
-          </div>
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost" onClick={() => navigate('/dashboard')}>Dashboard</Button>
-            <Button variant="ghost" onClick={() => navigate('/sales-transactions')} className="font-semibold text-primary">Sales</Button>
-            <span className="text-sm text-muted-foreground">
-              Welcome, {user?.user_metadata?.name || user?.email}
-            </span>
-          </div>
-        </div>
-      </header>
+      <AppHeader currentPath={location.pathname} />
 
       <main className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-6">
