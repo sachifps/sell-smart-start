@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -958,4 +959,151 @@ const SalesTransactions = () => {
                       <Select value={selectedProduct} onValueChange={setSelectedProduct}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select product" />
-                        </
+                        </SelectTrigger>
+                        <SelectContent>
+                          {products.map((product) => (
+                            <SelectItem key={product.prodcode} value={product.prodcode}>
+                              {product.description || product.prodcode}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="quantity">Quantity</Label>
+                      <Input
+                        id="quantity"
+                        type="number"
+                        min="1"
+                        value={productQuantity}
+                        onChange={(e) => setProductQuantity(Number(e.target.value))}
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <Button 
+                        type="button" 
+                        onClick={handleAddProduct}
+                        className="flex-1"
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              )}
+              
+              {transactionProducts.length > 0 ? (
+                <div className="border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Unit</TableHead>
+                        <TableHead className="text-right">Qty</TableHead>
+                        <TableHead className="text-right">Price</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="w-[100px]">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {transactionProducts.map((product, index) => {
+                        const productTotal = (product.quantity || 0) * (product.unitprice || 0);
+                        return (
+                          <TableRow key={`new-${product.prodcode}-${index}`}>
+                            <TableCell>{product.description || 'N/A'}</TableCell>
+                            <TableCell>
+                              {editingProductIndex === index ? (
+                                <div className="flex items-center space-x-2">
+                                  <Input 
+                                    value={editingUnit} 
+                                    onChange={(e) => setEditingUnit(e.target.value)} 
+                                    className="w-20 h-8"
+                                  />
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-8 w-8" 
+                                    onClick={saveEditedUnit}
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-8 w-8" 
+                                    onClick={cancelEditingUnit}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span 
+                                  className="cursor-pointer hover:underline" 
+                                  onClick={() => startEditingUnit(index, product.unit)}
+                                >
+                                  {product.customUnit || product.unit || 'N/A'}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">{product.quantity || 0}</TableCell>
+                            <TableCell className="text-right">{product.unitprice ? formatCurrency(product.unitprice) : 'N/A'}</TableCell>
+                            <TableCell className="text-right font-medium">{formatCurrency(productTotal)}</TableCell>
+                            <TableCell>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-destructive" 
+                                onClick={() => handleRemoveProduct(product.prodcode)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      <TableRow>
+                        <TableCell colSpan={3}></TableCell>
+                        <TableCell className="text-right font-bold">Total:</TableCell>
+                        <TableCell className="text-right font-bold">{formatCurrency(calculateTotal())}</TableCell>
+                        <TableCell></TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center p-4 border rounded-md text-muted-foreground">
+                  No products added yet. Click the "Add Product" button to add one.
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsTransactionDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveTransaction}>{isEditMode ? 'Update' : 'Create'} Transaction</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Transaction</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete transaction #{currentTransaction?.transno}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default SalesTransactions;
