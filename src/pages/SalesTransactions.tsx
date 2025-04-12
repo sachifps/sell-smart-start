@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ChevronDown, ChevronUp, Edit, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Edit, Plus, Trash2, Search, ArrowUpDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
@@ -24,6 +24,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 type Customer = {
   custno: string;
@@ -64,12 +72,16 @@ type SalesTransaction = {
   totalPrice: number;
 };
 
+type SortField = 'transno' | 'salesdate' | 'custname' | 'empname' | 'totalPrice';
+type SortOrder = 'asc' | 'desc';
+
 const SalesTransactions = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   
   const [salesData, setSalesData] = useState<SalesTransaction[]>([]);
+  const [filteredSalesData, setFilteredSalesData] = useState<SalesTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedTransaction, setExpandedTransaction] = useState<string | null>(null);
   
@@ -95,10 +107,79 @@ const SalesTransactions = () => {
   const [editingProductIndex, setEditingProductIndex] = useState<number | null>(null);
   const [editingUnit, setEditingUnit] = useState<string>('');
 
+  // New states for sorting and searching
+  const [sortField, setSortField] = useState<SortField>('transno');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchField, setSearchField] = useState<string>('all');
+
   useEffect(() => {
     fetchSalesData();
     fetchReferenceData();
   }, []);
+
+  useEffect(() => {
+    // Apply filtering and sorting whenever the source data, search term, or sort parameters change
+    let filtered = [...salesData];
+    
+    // Apply search filtering
+    if (searchTerm.trim() !== '') {
+      const term = searchTerm.toLowerCase();
+      
+      filtered = filtered.filter(sale => {
+        if (searchField === 'transno' || searchField === 'all') {
+          if (sale.transno.toLowerCase().includes(term)) return true;
+        }
+        
+        if (searchField === 'salesdate' || searchField === 'all') {
+          if (sale.salesdate && formatDate(sale.salesdate).toLowerCase().includes(term)) return true;
+        }
+        
+        if (searchField === 'custname' || searchField === 'all') {
+          if (sale.custname && sale.custname.toLowerCase().includes(term)) return true;
+        }
+        
+        if (searchField === 'empname' || searchField === 'all') {
+          if (sale.empname && sale.empname.toLowerCase().includes(term)) return true;
+        }
+        
+        return false;
+      });
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortField) {
+        case 'transno':
+          comparison = a.transno.localeCompare(b.transno);
+          break;
+        case 'salesdate':
+          const dateA = a.salesdate || '';
+          const dateB = b.salesdate || '';
+          comparison = dateA.localeCompare(dateB);
+          break;
+        case 'custname':
+          const custNameA = a.custname || '';
+          const custNameB = b.custname || '';
+          comparison = custNameA.localeCompare(custNameB);
+          break;
+        case 'empname':
+          const empNameA = a.empname || '';
+          const empNameB = b.empname || '';
+          comparison = empNameA.localeCompare(empNameB);
+          break;
+        case 'totalPrice':
+          comparison = a.totalPrice - b.totalPrice;
+          break;
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+    
+    setFilteredSalesData(filtered);
+  }, [salesData, searchTerm, searchField, sortField, sortOrder]);
 
   const fetchReferenceData = async () => {
     try {
@@ -191,6 +272,7 @@ const SalesTransactions = () => {
       
       if (!salesData || salesData.length === 0) {
         setSalesData([]);
+        setFilteredSalesData([]);
         setIsLoading(false);
         return;
       }
@@ -258,6 +340,7 @@ const SalesTransactions = () => {
       );
       
       setSalesData(salesWithDetails);
+      setFilteredSalesData(salesWithDetails);
     } catch (error) {
       console.error('Error fetching sales data:', error);
       toast({
@@ -307,6 +390,27 @@ const SalesTransactions = () => {
       });
       return null;
     }
+  };
+
+  const handleToggleSort = (field: SortField) => {
+    if (sortField === field) {
+      // Toggle order if field is already selected
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New field, default to ascending
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+  
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-4 w-4 opacity-50" />;
+    }
+    
+    return sortOrder === 'asc' 
+      ? <ChevronUp className="h-4 w-4" /> 
+      : <ChevronDown className="h-4 w-4" />;
   };
 
   const handleEditTransaction = (transaction: SalesTransaction) => {
@@ -584,32 +688,98 @@ const SalesTransactions = () => {
           </Button>
         </div>
         
+        <div className="mb-6 space-y-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search transactions..." 
+                className="pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <Select value={searchField} onValueChange={(value) => setSearchField(value)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Search in..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Fields</SelectItem>
+                <SelectItem value="transno">Transaction No</SelectItem>
+                <SelectItem value="salesdate">Date</SelectItem>
+                <SelectItem value="custname">Customer</SelectItem>
+                <SelectItem value="empname">Employee</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        
         <Card>
           <CardContent className="p-0">
             {isLoading ? (
               <div className="flex justify-center p-6">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
               </div>
-            ) : salesData.length === 0 ? (
+            ) : filteredSalesData.length === 0 ? (
               <div className="text-center p-6 text-muted-foreground">
-                No sales data available
+                {searchTerm ? 'No matching transactions found' : 'No sales data available'}
               </div>
             ) : (
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead className="font-semibold">Transaction No</TableHead>
-                      <TableHead className="font-semibold">Date</TableHead>
-                      <TableHead className="font-semibold">Customer</TableHead>
-                      <TableHead className="font-semibold">Employee</TableHead>
-                      <TableHead className="text-right font-semibold">Total</TableHead>
+                      <TableHead 
+                        className="font-semibold cursor-pointer" 
+                        onClick={() => handleToggleSort('transno')}
+                      >
+                        <div className="flex items-center">
+                          Transaction No
+                          {getSortIcon('transno')}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="font-semibold cursor-pointer" 
+                        onClick={() => handleToggleSort('salesdate')}
+                      >
+                        <div className="flex items-center">
+                          Date
+                          {getSortIcon('salesdate')}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="font-semibold cursor-pointer" 
+                        onClick={() => handleToggleSort('custname')}
+                      >
+                        <div className="flex items-center">
+                          Customer
+                          {getSortIcon('custname')}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="font-semibold cursor-pointer" 
+                        onClick={() => handleToggleSort('empname')}
+                      >
+                        <div className="flex items-center">
+                          Employee
+                          {getSortIcon('empname')}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="text-right font-semibold cursor-pointer" 
+                        onClick={() => handleToggleSort('totalPrice')}
+                      >
+                        <div className="flex items-center justify-end">
+                          Total
+                          {getSortIcon('totalPrice')}
+                        </div>
+                      </TableHead>
                       <TableHead className="w-[120px]">Actions</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {salesData.map((sale) => (
+                    {filteredSalesData.map((sale) => (
                       <React.Fragment key={sale.transno}>
                         <TableRow className="hover:bg-muted/50">
                           <TableCell className="font-medium">{sale.transno}</TableCell>
@@ -788,170 +958,4 @@ const SalesTransactions = () => {
                       <Select value={selectedProduct} onValueChange={setSelectedProduct}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select product" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {products.map((product) => (
-                            <SelectItem key={product.prodcode} value={product.prodcode}>
-                              {product.description || product.prodcode}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="quantity">Quantity</Label>
-                      <Input
-                        id="quantity"
-                        type="number"
-                        min="1"
-                        value={productQuantity}
-                        onChange={(e) => setProductQuantity(parseInt(e.target.value) || 1)}
-                      />
-                    </div>
-                    
-                    <div className="flex items-end space-x-2">
-                      <Button type="button" onClick={handleAddProduct}>Add</Button>
-                      <Button type="button" variant="ghost" onClick={() => setShowAddProduct(false)}>Cancel</Button>
-                    </div>
-                  </div>
-                </Card>
-              )}
-              
-              {transactionProducts.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Unit</TableHead>
-                      <TableHead className="text-right">Quantity</TableHead>
-                      <TableHead className="text-right">Unit Price</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                      <TableHead className="w-[100px]">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactionProducts.map((product, index) => {
-                      const productTotal = (product.quantity || 0) * (product.unitprice || 0);
-                      const isEditing = editingProductIndex === index;
-                      
-                      return (
-                        <TableRow key={`product-${index}`}>
-                          <TableCell>{product.description || product.prodcode}</TableCell>
-                          <TableCell>
-                            {isEditing ? (
-                              <div className="flex space-x-2">
-                                <Input
-                                  value={editingUnit}
-                                  onChange={(e) => setEditingUnit(e.target.value)}
-                                  className="w-20 h-8"
-                                />
-                                <div className="flex space-x-1">
-                                  <Button 
-                                    type="button" 
-                                    size="icon" 
-                                    variant="ghost" 
-                                    className="h-8 w-8"
-                                    onClick={saveEditedUnit}
-                                  >
-                                    <span className="sr-only">Save</span>
-                                    ✓
-                                  </Button>
-                                  <Button 
-                                    type="button" 
-                                    size="icon" 
-                                    variant="ghost" 
-                                    className="h-8 w-8"
-                                    onClick={cancelEditingUnit}
-                                  >
-                                    <span className="sr-only">Cancel</span>
-                                    ✕
-                                  </Button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="flex items-center space-x-2">
-                                <span>{product.customUnit || product.unit || 'N/A'}</span>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-6 w-6 p-0"
-                                  onClick={() => startEditingUnit(index, product.customUnit || product.unit)}
-                                >
-                                  <Edit className="h-3 w-3" />
-                                  <span className="sr-only">Edit unit</span>
-                                </Button>
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">{product.quantity}</TableCell>
-                          <TableCell className="text-right">{product.unitprice ? formatCurrency(product.unitprice) : 'N/A'}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(productTotal)}</TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveProduct(product.prodcode)}
-                              className="h-8 w-8 p-0 text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                    <TableRow>
-                      <TableCell colSpan={3}></TableCell>
-                      <TableCell className="text-right font-bold">Total:</TableCell>
-                      <TableCell className="text-right font-bold">{formatCurrency(calculateTotal())}</TableCell>
-                      <TableCell></TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="text-center py-4 text-muted-foreground">
-                  No products added yet
-                </div>
-              )}
-            </div>
-          </div>
-          
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsTransactionDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleSaveTransaction}>
-              {isEditMode ? 'Update Transaction' : 'Create Transaction'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirm Delete</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete transaction #{currentTransaction?.transno}?
-              This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-};
-
-export default SalesTransactions;
+                        </
