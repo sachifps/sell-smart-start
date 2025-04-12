@@ -225,21 +225,7 @@ const SalesTransactions = () => {
       
       setProducts(productsWithPrices);
       
-      const { data: lastTrans, error: lastTransError } = await supabase
-        .from('sales')
-        .select('transno')
-        .order('transno', { ascending: false })
-        .limit(1);
-      
-      if (lastTransError) throw lastTransError;
-      
-      let nextNumber = '1001';
-      if (lastTrans && lastTrans.length > 0) {
-        const lastNumber = parseInt(lastTrans[0].transno);
-        nextNumber = (lastNumber + 1).toString();
-      }
-      
-      setNextTransNo(nextNumber);
+      await fetchLatestTransactionNumber();
       
     } catch (error) {
       console.error('Error fetching reference data:', error);
@@ -372,10 +358,26 @@ const SalesTransactions = () => {
       
       if (lastTransError) throw lastTransError;
       
-      let nextNumber = '1001';
+      let nextNumber;
       if (lastTrans && lastTrans.length > 0) {
-        const lastNumber = parseInt(lastTrans[0].transno);
-        nextNumber = (lastNumber + 1).toString();
+        const lastTransNo = lastTrans[0].transno;
+        
+        const matches = lastTransNo.match(/^([A-Za-z]*)(\d+)$/);
+        if (matches && matches.length === 3) {
+          const prefix = matches[1];
+          const numPart = matches[2];
+          
+          const nextNumValue = parseInt(numPart) + 1;
+          
+          const paddedNum = nextNumValue.toString().padStart(numPart.length, '0');
+          
+          nextNumber = `${prefix}${paddedNum}`;
+        } else {
+          const numericPart = parseInt(lastTransNo);
+          nextNumber = isNaN(numericPart) ? "1001" : (numericPart + 1).toString();
+        }
+      } else {
+        nextNumber = "TR000001";
       }
       
       setNextTransNo(nextNumber);
