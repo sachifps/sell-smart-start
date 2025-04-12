@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -108,7 +107,9 @@ const SalesTransactions = () => {
   const [editingProductIndex, setEditingProductIndex] = useState<number | null>(null);
   const [editingUnit, setEditingUnit] = useState<string>('');
 
-  // New states for sorting and searching
+  const [customerName, setCustomerName] = useState<string>('');
+  const [employeeName, setEmployeeName] = useState<string>('');
+
   const [sortField, setSortField] = useState<SortField>('transno');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [searchTerm, setSearchTerm] = useState('');
@@ -120,10 +121,8 @@ const SalesTransactions = () => {
   }, []);
 
   useEffect(() => {
-    // Apply filtering and sorting whenever the source data, search term, or sort parameters change
     let filtered = [...salesData];
     
-    // Apply search filtering
     if (searchTerm.trim() !== '') {
       const term = searchTerm.toLowerCase();
       
@@ -148,7 +147,6 @@ const SalesTransactions = () => {
       });
     }
     
-    // Apply sorting
     filtered.sort((a, b) => {
       let comparison = 0;
       
@@ -395,10 +393,8 @@ const SalesTransactions = () => {
 
   const handleToggleSort = (field: SortField) => {
     if (sortField === field) {
-      // Toggle order if field is already selected
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
-      // New field, default to ascending
       setSortField(field);
       setSortOrder('asc');
     }
@@ -421,6 +417,8 @@ const SalesTransactions = () => {
     setTransactionDate(transaction.salesdate || '');
     setSelectedCustomer(transaction.custno || '');
     setSelectedEmployee(transaction.empno || '');
+    setCustomerName(transaction.custname || '');
+    setEmployeeName(transaction.empname || '');
     setTransactionProducts([...transaction.productDetails]);
     
     setIsTransactionDialogOpen(true);
@@ -435,6 +433,8 @@ const SalesTransactions = () => {
     setTransactionDate(new Date().toISOString().split('T')[0]);
     setSelectedCustomer('');
     setSelectedEmployee('');
+    setCustomerName('');
+    setEmployeeName('');
     setTransactionProducts([]);
     setShowAddProduct(false);
     setSelectedProduct('');
@@ -513,7 +513,7 @@ const SalesTransactions = () => {
 
   const handleSaveTransaction = async () => {
     try {
-      if (!transactionDate || !selectedCustomer || !selectedEmployee || transactionProducts.length === 0) {
+      if (!transactionDate || transactionProducts.length === 0) {
         toast({
           title: "Validation Error",
           description: "Please fill in all required fields and add at least one product",
@@ -529,12 +529,34 @@ const SalesTransactions = () => {
           .from('sales')
           .update({
             salesdate: transactionDate,
-            custno: selectedCustomer,
-            empno: selectedEmployee
+            custno: selectedCustomer || null,
+            empno: selectedEmployee || null
           })
           .eq('transno', transno);
 
         if (updateError) throw updateError;
+
+        if (selectedCustomer && customerName) {
+          const { error: customerError } = await supabase
+            .from('customer')
+            .update({ custname: customerName })
+            .eq('custno', selectedCustomer);
+          
+          if (customerError) console.error('Error updating customer:', customerError);
+        }
+
+        if (selectedEmployee && employeeName) {
+          const names = employeeName.split(' ');
+          const firstname = names[0] || '';
+          const lastname = names.slice(1).join(' ') || '';
+          
+          const { error: employeeError } = await supabase
+            .from('employee')
+            .update({ firstname, lastname })
+            .eq('empno', selectedEmployee);
+          
+          if (employeeError) console.error('Error updating employee:', employeeError);
+        }
 
         const { error: deleteError } = await supabase
           .from('salesdetail')
@@ -543,13 +565,63 @@ const SalesTransactions = () => {
 
         if (deleteError) throw deleteError;
       } else {
+        let custno = selectedCustomer;
+        let empno = selectedEmployee;
+
+        if (!custno && customerName) {
+          const { data: lastCust } = await supabase
+            .from('customer')
+            .select('custno')
+            .order('custno', { ascending: false })
+            .limit(1);
+            
+          const newCustNo = lastCust && lastCust.length > 0 
+            ? `C${(parseInt(lastCust[0].custno.substring(1)) + 1).toString().padStart(3, '0')}` 
+            : 'C001';
+            
+          const { error: custError } = await supabase
+            .from('customer')
+            .insert({ custno: newCustNo, custname: customerName });
+            
+          if (custError) console.error('Error creating customer:', custError);
+          else custno = newCustNo;
+        }
+
+        if (!empno && employeeName) {
+          const { data: lastEmp } = await supabase
+            .from('employee')
+            .select('empno')
+            .order('empno', { ascending: false })
+            .limit(1);
+            
+          const newEmpNo = lastEmp && lastEmp.length > 0 
+            ? `E${(parseInt(lastEmp[0].empno.substring(1)) + 1).toString().padStart(3, '0')}` 
+            : 'E001';
+            
+          const names = employeeName.split(' ');
+          const firstname = names[0] || '';
+          const lastname = names.slice(1).join(' ') || '';
+          
+          const { error: empError } = await supabase
+            .from('employee')
+            .insert({ 
+              empno: newEmpNo, 
+              firstname, 
+              lastname,
+              hiredate: new Date().toISOString()
+            });
+            
+          if (empError) console.error('Error creating employee:', empError);
+          else empno = newEmpNo;
+        }
+
         const { error: insertError } = await supabase
           .from('sales')
           .insert({
             transno,
             salesdate: transactionDate,
-            custno: selectedCustomer,
-            empno: selectedEmployee
+            custno,
+            empno
           });
 
         if (insertError) throw insertError;
@@ -895,6 +967,16 @@ const SalesTransactions = () => {
           <div className="grid gap-6 py-4">
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
+                <Label htmlFor="transactionNo">Transaction No</Label>
+                <Input
+                  id="transactionNo"
+                  type="text"
+                  value={isEditMode ? currentTransaction?.transno || '' : nextTransNo}
+                  disabled
+                  className="bg-muted"
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="transactionDate">Transaction Date</Label>
                 <Input
                   id="transactionDate"
@@ -903,37 +985,29 @@ const SalesTransactions = () => {
                   onChange={(e) => setTransactionDate(e.target.value)}
                 />
               </div>
-              
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="customer">Customer</Label>
-                <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customers.map((customer) => (
-                      <SelectItem key={customer.custno} value={customer.custno}>
-                        {customer.custname || customer.custno}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  id="customer"
+                  type="text"
+                  placeholder="Enter customer name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                />
               </div>
               
               <div className="space-y-2">
                 <Label htmlFor="employee">Employee</Label>
-                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.empno} value={employee.empno}>
-                        {employee.fullname || employee.empno}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  id="employee"
+                  type="text"
+                  placeholder="Enter employee name"
+                  value={employeeName}
+                  onChange={(e) => setEmployeeName(e.target.value)}
+                />
               </div>
             </div>
             
@@ -1075,6 +1149,13 @@ const SalesTransactions = () => {
                   No products added yet. Click the "Add Product" button to add one.
                 </div>
               )}
+              
+              <div className="rounded-md bg-muted p-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">Total Amount:</span>
+                  <span className="text-xl font-bold">{formatCurrency(calculateTotal())}</span>
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>
