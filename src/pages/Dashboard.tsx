@@ -6,6 +6,22 @@ import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { DollarSign, Users, Package, TrendingUp, ArrowRight } from 'lucide-react';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent
+} from '@/components/ui/chart';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line
+} from 'recharts';
 
 interface DashboardStatsType {
   totalSales: number;
@@ -22,6 +38,12 @@ interface Transaction {
   created_at: string;
 }
 
+interface TransactionsByDay {
+  date: string;
+  totalAmount: number;
+  transactionCount: number;
+}
+
 const Dashboard = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -32,6 +54,7 @@ const Dashboard = () => {
     totalProducts: 0
   });
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
+  const [transactionsByDay, setTransactionsByDay] = useState<TransactionsByDay[]>([]);
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
@@ -42,7 +65,7 @@ const Dashboard = () => {
         // Fetch transactions for total sales and count
         const { data: transactionsData, error: transactionsError } = await supabase
           .from('transactions')
-          .select('amount');
+          .select('amount, created_at');
         
         if (transactionsError) throw transactionsError;
         
@@ -64,12 +87,35 @@ const Dashboard = () => {
           
         if (productError) throw productError;
         
-        // Fetch recent transactions - updated to fetch 10 transactions instead of 5
+        // Process transactions for chart data (group by day)
+        const transactionsGroupedByDay = transactionsData.reduce((acc: Record<string, TransactionsByDay>, transaction) => {
+          const date = new Date(transaction.created_at).toISOString().split('T')[0];
+          
+          if (!acc[date]) {
+            acc[date] = {
+              date,
+              totalAmount: 0,
+              transactionCount: 0
+            };
+          }
+          
+          acc[date].totalAmount += Number(transaction.amount);
+          acc[date].transactionCount += 1;
+          
+          return acc;
+        }, {});
+        
+        // Convert to array and sort by date
+        const chartData = Object.values(transactionsGroupedByDay)
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          .slice(-7); // Show last 7 days
+        
+        // Fetch recent transactions for the small list
         const { data: recentTransactionsData, error: recentTransactionsError } = await supabase
           .from('transactions')
-          .select('*')
+          .select('id, product_name, amount, quantity, created_at')
           .order('created_at', { ascending: false })
-          .limit(10);
+          .limit(5);
           
         if (recentTransactionsError) throw recentTransactionsError;
         
@@ -81,6 +127,8 @@ const Dashboard = () => {
         });
         
         setRecentTransactions(recentTransactionsData as Transaction[]);
+        setTransactionsByDay(chartData);
+        
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -97,6 +145,11 @@ const Dashboard = () => {
       currency: 'USD',
       minimumFractionDigits: 2
     }).format(amount);
+  };
+  
+  const formatDate = (dateString: string) => {
+    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+    return new Date(dateString).toLocaleDateString('en-US', options);
   };
   
   return (
@@ -167,7 +220,66 @@ const Dashboard = () => {
               </Card>
             </div>
             
-            {/* Recent Transactions */}
+            {/* Transactions Chart */}
+            <div className="mb-8">
+              <Card>
+                <CardContent className="p-6">
+                  <h2 className="text-xl font-semibold mb-6">Transaction History</h2>
+                  
+                  <div className="h-80">
+                    <ChartContainer 
+                      config={{
+                        sales: { color: "#3498db" },
+                        transactions: { color: "#2ecc71" }
+                      }}
+                    >
+                      <LineChart data={transactionsByDay}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="date" 
+                          tickFormatter={formatDate}
+                          tick={{fontSize: 12}}
+                        />
+                        <YAxis yAxisId="left" tickFormatter={(value) => `$${value}`} />
+                        <YAxis yAxisId="right" orientation="right" />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Line 
+                          yAxisId="left"
+                          type="monotone" 
+                          dataKey="totalAmount" 
+                          stroke="#3498db" 
+                          name="Sales"
+                          strokeWidth={2}
+                        />
+                        <Line 
+                          yAxisId="right"
+                          type="monotone" 
+                          dataKey="transactionCount" 
+                          stroke="#2ecc71" 
+                          name="Transactions"
+                          strokeWidth={2}
+                        />
+                      </LineChart>
+                    </ChartContainer>
+                  </div>
+                  
+                  <div className="flex justify-center mt-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                        <span className="text-sm text-muted-foreground">Sales Amount</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                        <span className="text-sm text-muted-foreground">Transaction Count</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            
+            {/* Recent Transactions Summary */}
             <div className="mb-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold">Recent Transactions</h2>
@@ -181,50 +293,56 @@ const Dashboard = () => {
                 </Button>
               </div>
               
-              <div className="bg-card text-card-foreground rounded-lg shadow overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted">
-                      <tr>
-                        <th className="py-3 px-4 text-left font-medium">Product</th>
-                        <th className="py-3 px-4 text-left font-medium">Quantity</th>
-                        <th className="py-3 px-4 text-left font-medium">Amount</th>
-                        <th className="py-3 px-4 text-left font-medium">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentTransactions.length > 0 ? (
-                        recentTransactions.map((transaction) => (
-                          <tr key={transaction.id} className="border-t border-border">
-                            <td className="py-3 px-4">{transaction.product_name}</td>
-                            <td className="py-3 px-4">{transaction.quantity}</td>
-                            <td className="py-3 px-4">{formatCurrency(Number(transaction.amount))}</td>
-                            <td className="py-3 px-4">{new Date(transaction.created_at).toLocaleDateString()}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={4} className="py-4 px-4 text-center text-muted-foreground">
-                            No recent transactions found
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {recentTransactions.length > 0 ? (
+                  recentTransactions.map((transaction) => (
+                    <Card key={transaction.id} className="overflow-hidden">
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-medium text-sm">{transaction.product_name}</h3>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(transaction.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <p className="font-semibold">{formatCurrency(Number(transaction.amount))}</p>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Quantity: {transaction.quantity}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))
+                ) : (
+                  <div className="col-span-3 py-4 text-center text-muted-foreground">
+                    No recent transactions found
+                  </div>
+                )}
               </div>
             </div>
-            
-            {/* Welcome Card */}
-            <Card>
-              <CardContent className="p-6">
-                <h2 className="text-xl font-semibold mb-4">Welcome to SellSmart</h2>
-                <p className="text-muted-foreground">This is your dashboard. You can view sales data and manage transactions from here.</p>
-              </CardContent>
-            </Card>
           </>
         )}
       </main>
+    </div>
+  );
+};
+
+// Custom tooltip for the chart
+const CustomTooltip = ({ active, payload }: any) => {
+  if (!active || !payload || !payload.length) return null;
+  
+  return (
+    <div className="bg-background border border-border rounded-md shadow-md p-3">
+      <p className="text-sm font-medium">{new Date(payload[0].payload.date).toLocaleDateString()}</p>
+      <p className="text-xs text-blue-500">
+        Sales: {new Intl.NumberFormat('en-US', { 
+          style: 'currency', 
+          currency: 'USD' 
+        }).format(payload[0].value)}
+      </p>
+      <p className="text-xs text-green-500">
+        Transactions: {payload[1].value}
+      </p>
     </div>
   );
 };
