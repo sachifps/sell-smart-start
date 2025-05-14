@@ -64,12 +64,12 @@ const Dashboard = () => {
           
         if (productError) throw productError;
         
-        // Fetch recent transactions
+        // Fetch recent transactions - updated to fetch 10 transactions instead of 5
         const { data: recentTransactionsData, error: recentTransactionsError } = await supabase
           .from('transactions')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(5);
+          .limit(10);
           
         if (recentTransactionsError) throw recentTransactionsError;
         
