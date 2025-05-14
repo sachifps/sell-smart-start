@@ -1,4 +1,3 @@
-
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AppHeader } from '@/components/app-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -95,16 +94,18 @@ const Dashboard = () => {
       setLoading(true);
       
       try {
-        // Fetch transactions for total sales and count
-        const { data: transactionsData, error: transactionsError } = await supabase
+        // Fetch ALL transactions for accurate total sales and count
+        const { data: allTransactionsData, error: allTransactionsError } = await supabase
           .from('transactions')
-          .select('amount, created_at, product_name, product_code');
+          .select('amount, created_at, product_name, product_code')
+          .order('created_at', { ascending: false });
         
-        if (transactionsError) throw transactionsError;
+        if (allTransactionsError) throw allTransactionsError;
         
-        // Calculate total sales
-        const totalSales = transactionsData.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
-        const totalTransactions = transactionsData.length;
+        // Calculate total sales from all transactions
+        const totalSales = allTransactionsData.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+        // Get accurate total transaction count
+        const totalTransactions = allTransactionsData.length;
         
         // Fetch customer count
         const { count: customerCount, error: customerError } = await supabase
@@ -135,7 +136,7 @@ const Dashboard = () => {
         if (departmentError) throw departmentError;
         
         // Process transactions for chart data (group by day)
-        const transactionsGroupedByDay = transactionsData.reduce((acc: Record<string, TransactionsByDay>, transaction) => {
+        const transactionsGroupedByDay = allTransactionsData.reduce((acc: Record<string, TransactionsByDay>, transaction) => {
           const date = new Date(transaction.created_at).toISOString().split('T')[0];
           
           if (!acc[date]) {
@@ -158,7 +159,7 @@ const Dashboard = () => {
           .slice(-7); // Show last 7 days
         
         // Calculate top products by sales amount
-        const productSales = transactionsData.reduce((acc: Record<string, Product>, transaction) => {
+        const productSales = allTransactionsData.reduce((acc: Record<string, Product>, transaction) => {
           const { product_code, product_name, amount } = transaction;
           
           if (!acc[product_code]) {
@@ -186,7 +187,7 @@ const Dashboard = () => {
           value: product.sales
         }));
         
-        // Fetch recent transactions for the small list (show 10 as requested)
+        // Fetch recent transactions for the small list (show 10 most recent)
         const { data: recentTransactionsData, error: recentTransactionsError } = await supabase
           .from('transactions')
           .select('id, product_name, amount, quantity, created_at')
