@@ -1,17 +1,19 @@
 
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AppHeader } from '@/components/app-header';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { DollarSign, Users, Package, TrendingUp, ArrowRight } from 'lucide-react';
+import { DollarSign, Users, Package, TrendingUp, ArrowRight, Receipt, CalendarDays, ListCheck } from 'lucide-react';
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent
 } from '@/components/ui/chart';
 import {
+  LineChart,
+  Line,
   BarChart,
   Bar,
   XAxis,
@@ -19,15 +21,28 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line
+  PieChart,
+  Pie,
+  Cell,
+  Legend
 } from 'recharts';
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from '@/components/ui/table';
+import { toast } from '@/components/ui/use-toast';
 
 interface DashboardStatsType {
   totalSales: number;
   totalTransactions: number;
   totalCustomers: number;
   totalProducts: number;
+  totalEmployees: number;
+  totalDepartments: number;
 }
 
 interface Transaction {
@@ -44,6 +59,20 @@ interface TransactionsByDay {
   transactionCount: number;
 }
 
+interface Product {
+  prodcode: string;
+  description: string;
+  unit: string;
+  sales: number;
+}
+
+interface CategoryData {
+  name: string;
+  value: number;
+}
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+
 const Dashboard = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -51,10 +80,14 @@ const Dashboard = () => {
     totalSales: 0,
     totalTransactions: 0,
     totalCustomers: 0,
-    totalProducts: 0
+    totalProducts: 0,
+    totalEmployees: 0,
+    totalDepartments: 0
   });
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [transactionsByDay, setTransactionsByDay] = useState<TransactionsByDay[]>([]);
+  const [topProducts, setTopProducts] = useState<Product[]>([]);
+  const [categoryData, setCategoryData] = useState<CategoryData[]>([]);
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
@@ -65,7 +98,7 @@ const Dashboard = () => {
         // Fetch transactions for total sales and count
         const { data: transactionsData, error: transactionsError } = await supabase
           .from('transactions')
-          .select('amount, created_at');
+          .select('amount, created_at, product_name, product_code');
         
         if (transactionsError) throw transactionsError;
         
@@ -73,7 +106,7 @@ const Dashboard = () => {
         const totalSales = transactionsData.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
         const totalTransactions = transactionsData.length;
         
-        // Fetch customer count (distinct custno from sales table)
+        // Fetch customer count
         const { count: customerCount, error: customerError } = await supabase
           .from('customer')
           .select('custno', { count: 'exact', head: true });
@@ -86,6 +119,20 @@ const Dashboard = () => {
           .select('prodcode', { count: 'exact', head: true });
           
         if (productError) throw productError;
+        
+        // Fetch employee count
+        const { count: employeeCount, error: employeeError } = await supabase
+          .from('employee')
+          .select('empno', { count: 'exact', head: true });
+          
+        if (employeeError) throw employeeError;
+        
+        // Fetch department count
+        const { count: departmentCount, error: departmentError } = await supabase
+          .from('department')
+          .select('deptcode', { count: 'exact', head: true });
+          
+        if (departmentError) throw departmentError;
         
         // Process transactions for chart data (group by day)
         const transactionsGroupedByDay = transactionsData.reduce((acc: Record<string, TransactionsByDay>, transaction) => {
@@ -110,12 +157,41 @@ const Dashboard = () => {
           .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
           .slice(-7); // Show last 7 days
         
-        // Fetch recent transactions for the small list
+        // Calculate top products by sales amount
+        const productSales = transactionsData.reduce((acc: Record<string, Product>, transaction) => {
+          const { product_code, product_name, amount } = transaction;
+          
+          if (!acc[product_code]) {
+            acc[product_code] = {
+              prodcode: product_code,
+              description: product_name,
+              unit: '',
+              sales: 0
+            };
+          }
+          
+          acc[product_code].sales += Number(amount);
+          
+          return acc;
+        }, {});
+        
+        // Convert to array and sort by sales
+        const topProductsData = Object.values(productSales)
+          .sort((a, b) => b.sales - a.sales)
+          .slice(0, 5);
+          
+        // Create category data for pie chart
+        const categoryDataArray = topProductsData.map(product => ({
+          name: product.description,
+          value: product.sales
+        }));
+        
+        // Fetch recent transactions for the small list (show 10 as requested)
         const { data: recentTransactionsData, error: recentTransactionsError } = await supabase
           .from('transactions')
           .select('id, product_name, amount, quantity, created_at')
           .order('created_at', { ascending: false })
-          .limit(5);
+          .limit(10);
           
         if (recentTransactionsError) throw recentTransactionsError;
         
@@ -123,14 +199,23 @@ const Dashboard = () => {
           totalSales,
           totalTransactions,
           totalCustomers: customerCount || 0,
-          totalProducts: productCount || 0
+          totalProducts: productCount || 0,
+          totalEmployees: employeeCount || 0,
+          totalDepartments: departmentCount || 0
         });
         
         setRecentTransactions(recentTransactionsData as Transaction[]);
         setTransactionsByDay(chartData);
+        setTopProducts(topProductsData);
+        setCategoryData(categoryDataArray);
         
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
+        toast({
+          title: "Error loading dashboard data",
+          description: "There was a problem fetching the data. Please try again later.",
+          variant: "destructive"
+        });
       } finally {
         setLoading(false);
       }
@@ -166,7 +251,7 @@ const Dashboard = () => {
         ) : (
           <>
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               {/* Total Sales Card */}
               <Card>
                 <CardContent className="flex flex-col p-6">
@@ -186,7 +271,7 @@ const Dashboard = () => {
                   <div className="flex justify-between items-center mb-2">
                     <p className="text-sm font-medium text-muted-foreground">Transactions</p>
                     <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                      <TrendingUp className="h-4 w-4 text-green-500" />
+                      <Receipt className="h-4 w-4 text-green-500" />
                     </div>
                   </div>
                   <h3 className="text-2xl font-bold">{stats.totalTransactions}</h3>
@@ -218,14 +303,41 @@ const Dashboard = () => {
                   <h3 className="text-2xl font-bold">{stats.totalProducts}</h3>
                 </CardContent>
               </Card>
+              
+              {/* Employees Card */}
+              <Card>
+                <CardContent className="flex flex-col p-6">
+                  <div className="flex justify-between items-center mb-2">
+                    <p className="text-sm font-medium text-muted-foreground">Employees</p>
+                    <div className="h-8 w-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                      <Users className="h-4 w-4 text-red-500" />
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-bold">{stats.totalEmployees}</h3>
+                </CardContent>
+              </Card>
+              
+              {/* Departments Card */}
+              <Card>
+                <CardContent className="flex flex-col p-6">
+                  <div className="flex justify-between items-center mb-2">
+                    <p className="text-sm font-medium text-muted-foreground">Departments</p>
+                    <div className="h-8 w-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                      <ListCheck className="h-4 w-4 text-indigo-500" />
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-bold">{stats.totalDepartments}</h3>
+                </CardContent>
+              </Card>
             </div>
             
-            {/* Transactions Chart */}
-            <div className="mb-8">
-              <Card>
-                <CardContent className="p-6">
-                  <h2 className="text-xl font-semibold mb-6">Transaction History</h2>
-                  
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              {/* Transactions Chart - Takes 2/3 of the width */}
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle>Transaction History (Last 7 Days)</CardTitle>
+                </CardHeader>
+                <CardContent>
                   <div className="h-80">
                     <ChartContainer 
                       config={{
@@ -277,9 +389,78 @@ const Dashboard = () => {
                   </div>
                 </CardContent>
               </Card>
+              
+              {/* Product Sales Distribution - Takes 1/3 of the width */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Products by Sales</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-80 flex justify-center items-center">
+                    <PieChart width={250} height={250}>
+                      <Pie
+                        data={categoryData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={renderCustomizedLabel}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {categoryData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                    </PieChart>
+                  </div>
+                  <div className="mt-2">
+                    {categoryData.map((entry, index) => (
+                      <div key={index} className="flex items-center justify-between mb-1 text-xs">
+                        <div className="flex items-center">
+                          <span 
+                            className="w-3 h-3 mr-2 rounded-full" 
+                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                          ></span>
+                          <span className="truncate max-w-[150px]">{entry.name}</span>
+                        </div>
+                        <span>{formatCurrency(entry.value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
             
-            {/* Recent Transactions Summary */}
+            {/* Top Products Table */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Top Selling Products</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product Code</TableHead>
+                      <TableHead>Product Name</TableHead>
+                      <TableHead className="text-right">Total Sales</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {topProducts.map((product) => (
+                      <TableRow key={product.prodcode}>
+                        <TableCell className="font-medium">{product.prodcode}</TableCell>
+                        <TableCell>{product.description}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(product.sales)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+            
+            {/* Recent Transactions */}
             <div className="mb-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold">Recent Transactions</h2>
@@ -293,37 +474,62 @@ const Dashboard = () => {
                 </Button>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {recentTransactions.length > 0 ? (
-                  recentTransactions.map((transaction) => (
-                    <Card key={transaction.id} className="overflow-hidden">
-                      <CardContent className="p-4">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="font-medium text-sm">{transaction.product_name}</h3>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(transaction.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <p className="font-semibold">{formatCurrency(Number(transaction.amount))}</p>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Quantity: {transaction.quantity}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  ))
-                ) : (
-                  <div className="col-span-3 py-4 text-center text-muted-foreground">
-                    No recent transactions found
-                  </div>
-                )}
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Quantity</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {recentTransactions.length > 0 ? (
+                      recentTransactions.map((transaction) => (
+                        <TableRow key={transaction.id}>
+                          <TableCell className="font-medium">{transaction.product_name}</TableCell>
+                          <TableCell>{new Date(transaction.created_at).toLocaleDateString()}</TableCell>
+                          <TableCell>{transaction.quantity}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(Number(transaction.amount))}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-4">
+                          No recent transactions found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
               </div>
             </div>
           </>
         )}
       </main>
     </div>
+  );
+};
+
+// Helper function for rendering PieChart labels
+const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+  const RADIAN = Math.PI / 180;
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  return (
+    <text 
+      x={x} 
+      y={y} 
+      fill="white" 
+      textAnchor={x > cx ? 'start' : 'end'} 
+      dominantBaseline="central"
+      fontSize={12}
+    >
+      {`${(percent * 100).toFixed(0)}%`}
+    </text>
   );
 };
 
