@@ -126,6 +126,19 @@ export interface AuditLogEntry {
   created_at: string;
 }
 
+// Function to get audit logs with proper typing
+export const getAuditLogs = async () => {
+  const { data, error } = await supabase
+    .from('sales_audit_log' as any)
+    .select('*')
+    .order('created_at', { ascending: false });
+    
+  if (error) throw error;
+  
+  // Safely cast the results to AuditLogEntry[]
+  return (data || []) as unknown as AuditLogEntry[];
+};
+
 // Function to track who edited sales and sales details
 export const trackSalesChanges = async (table: 'sales' | 'salesdetail', action: 'created' | 'updated' | 'deleted', data: any, userId: string) => {
   try {
