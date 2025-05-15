@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -174,12 +175,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.user) {
         // Check for pre-registered settings
         const { data: preregisteredData, error: preregError } = await supabase
-          .from('preregistered_emails')
+          .from('preregistered_emails' as any)
           .select('*')
           .eq('email', email)
           .single();
         
-        let roleToSet = 'user';
+        let roleToSet: UserRole = 'user';
         let permissions = {
           can_edit_sales: false,
           can_delete_sales: false,
@@ -191,14 +192,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // If email was pre-registered, use those settings
         if (!preregError && preregisteredData) {
-          roleToSet = preregisteredData.role;
+          const typedData = preregisteredData as any;
+          roleToSet = typedData.role as UserRole;
           permissions = {
-            can_edit_sales: preregisteredData.can_edit_sales,
-            can_delete_sales: preregisteredData.can_delete_sales,
-            can_add_sales: preregisteredData.can_add_sales,
-            can_edit_sales_detail: preregisteredData.can_edit_sales_detail,
-            can_delete_sales_detail: preregisteredData.can_delete_sales_detail,
-            can_add_sales_detail: preregisteredData.can_add_sales_detail
+            can_edit_sales: typedData.can_edit_sales,
+            can_delete_sales: typedData.can_delete_sales,
+            can_add_sales: typedData.can_add_sales,
+            can_edit_sales_detail: typedData.can_edit_sales_detail,
+            can_delete_sales_detail: typedData.can_delete_sales_detail,
+            can_add_sales_detail: typedData.can_add_sales_detail
           };
         }
 
@@ -219,7 +221,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .from('user_roles')
           .insert({
             user_id: data.user.id,
-            role: roleToSet
+            role: roleToSet as any
           });
         
         if (roleError) {
@@ -241,7 +243,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Delete the pre-registered email entry if it exists
         if (!preregError && preregisteredData) {
           await supabase
-            .from('preregistered_emails')
+            .from('preregistered_emails' as any)
             .delete()
             .eq('email', email);
         }

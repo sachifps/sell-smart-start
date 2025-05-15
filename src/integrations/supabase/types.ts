@@ -165,6 +165,48 @@ export type Database = {
           },
         ]
       }
+      preregistered_emails: {
+        Row: {
+          can_add_sales: boolean
+          can_add_sales_detail: boolean
+          can_delete_sales: boolean
+          can_delete_sales_detail: boolean
+          can_edit_sales: boolean
+          can_edit_sales_detail: boolean
+          created_at: string | null
+          email: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string | null
+        }
+        Insert: {
+          can_add_sales?: boolean
+          can_add_sales_detail?: boolean
+          can_delete_sales?: boolean
+          can_delete_sales_detail?: boolean
+          can_edit_sales?: boolean
+          can_edit_sales_detail?: boolean
+          created_at?: string | null
+          email: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string | null
+        }
+        Update: {
+          can_add_sales?: boolean
+          can_add_sales_detail?: boolean
+          can_delete_sales?: boolean
+          can_delete_sales_detail?: boolean
+          can_edit_sales?: boolean
+          can_edit_sales_detail?: boolean
+          created_at?: string | null
+          email?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       pricehist: {
         Row: {
           effdate: string
