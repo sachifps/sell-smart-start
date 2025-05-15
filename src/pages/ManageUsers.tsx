@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
-import { Shield, Settings, RefreshCcw, UserPlus, AlertCircle, Mail, Lock, User } from 'lucide-react';
+import { Shield, Settings, RefreshCcw, UserPlus, AlertCircle, Mail } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   TooltipProvider,
@@ -67,11 +68,9 @@ type UserPermission = {
   can_add_sales_detail: boolean;
 };
 
-// Define form schema for adding a new user
+// Define form schema for pre-registering an email
 const addUserSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
-  name: z.string().min(1, { message: "Name is required" }),
   role: z.enum(['user', 'admin']),
 });
 
@@ -94,8 +93,6 @@ const ManageUsers = () => {
     resolver: zodResolver(addUserSchema),
     defaultValues: {
       email: '',
-      password: '',
-      name: '',
       role: 'user',
     },
   });
@@ -257,69 +254,85 @@ const ManageUsers = () => {
     }
   };
 
-  // Function to add a new user
+  // Function to pre-register an email with permissions
   const handleAddUser = async (values: AddUserFormValues) => {
     if (!isAdmin) return;
     
     try {
       setIsAddingUser(true);
       
-      // Create the user in Supabase Auth
-      const { data: userData, error: createError } = await supabase.auth.admin.createUser({
-        email: values.email,
-        password: values.password,
-        email_confirm: true,
-        user_metadata: {
-          name: values.name,
-        },
+      // Check if the email already exists in profiles
+      const { data: existingProfiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', values.email);
+      
+      if (profileError) throw profileError;
+
+      // If profile already exists, notify the user
+      if (existingProfiles && existingProfiles.length > 0) {
+        toast({
+          title: "Error",
+          description: "This email is already registered"
+        });
+        return;
+      }
+
+      // Generate a UUID for this pre-registered user
+      const tempId = crypto.randomUUID();
+      
+      // Insert into profiles
+      const { error: profileInsertError } = await supabase
+        .from('profiles')
+        .insert({
+          id: tempId,
+          email: values.email,
+        });
+      
+      if (profileInsertError) throw profileInsertError;
+      
+      // Add user role
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .insert({ 
+          user_id: tempId, 
+          role: values.role 
+        });
+      
+      if (roleError) throw roleError;
+      
+      // Setup default permissions based on role
+      const isUserAdmin = values.role === 'admin';
+      const { error: permError } = await supabase
+        .from('user_permissions')
+        .insert({ 
+          user_id: tempId,
+          can_edit_sales: isUserAdmin,
+          can_delete_sales: isUserAdmin,
+          can_add_sales: isUserAdmin,
+          can_edit_sales_detail: isUserAdmin,
+          can_delete_sales_detail: isUserAdmin,
+          can_add_sales_detail: isUserAdmin
+        });
+      
+      if (permError) throw permError;
+      
+      toast({
+        title: "Success",
+        description: `Email ${values.email} has been pre-registered with ${values.role} permissions`
       });
       
-      if (createError) throw createError;
+      // Reset form and close dialog
+      addUserForm.reset();
+      setAddUserOpen(false);
       
-      if (userData.user) {
-        // Add user role
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .insert({ 
-            user_id: userData.user.id, 
-            role: values.role 
-          });
-        
-        if (roleError) throw roleError;
-        
-        // Setup default permissions based on role
-        const isUserAdmin = values.role === 'admin';
-        const { error: permError } = await supabase
-          .from('user_permissions')
-          .insert({ 
-            user_id: userData.user.id,
-            can_edit_sales: isUserAdmin,
-            can_delete_sales: isUserAdmin,
-            can_add_sales: isUserAdmin,
-            can_edit_sales_detail: isUserAdmin,
-            can_delete_sales_detail: isUserAdmin,
-            can_add_sales_detail: isUserAdmin
-          });
-        
-        if (permError) throw permError;
-        
-        toast({
-          title: "Success",
-          description: `User ${values.email} has been created`
-        });
-        
-        // Reset form and close dialog
-        addUserForm.reset();
-        setAddUserOpen(false);
-        
-        // Refresh users list
-        fetchUsers();
-      }
+      // Refresh users list
+      fetchUsers();
     } catch (error: any) {
-      console.error('Error adding user:', error);
+      console.error('Error pre-registering email:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to create user"
+        description: error.message || "Failed to pre-register email"
       });
     } finally {
       setIsAddingUser(false);
@@ -357,36 +370,20 @@ const ManageUsers = () => {
                 <DialogTrigger asChild>
                   <Button className="flex items-center">
                     <UserPlus className="mr-2 h-4 w-4" />
-                    Add User
+                    Pre-register Email
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-md">
                   <DialogHeader>
-                    <DialogTitle>Add New User</DialogTitle>
+                    <DialogTitle>Pre-register Email</DialogTitle>
                     <DialogDescription>
-                      Create a new user account with specified role and permissions.
+                      Add an email address with specified role and permissions. When this email is used for signup,
+                      the assigned permissions will be automatically applied.
                     </DialogDescription>
                   </DialogHeader>
                   
                   <Form {...addUserForm}>
                     <form onSubmit={addUserForm.handleSubmit(handleAddUser)} className="space-y-4 py-2">
-                      <FormField
-                        control={addUserForm.control}
-                        name="name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Name</FormLabel>
-                            <FormControl>
-                              <div className="flex items-center">
-                                <User className="mr-2 h-4 w-4 text-muted-foreground" />
-                                <Input placeholder="John Doe" {...field} />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
                       <FormField
                         control={addUserForm.control}
                         name="email"
@@ -397,23 +394,6 @@ const ManageUsers = () => {
                               <div className="flex items-center">
                                 <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
                                 <Input placeholder="user@example.com" {...field} />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={addUserForm.control}
-                        name="password"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Password</FormLabel>
-                            <FormControl>
-                              <div className="flex items-center">
-                                <Lock className="mr-2 h-4 w-4 text-muted-foreground" />
-                                <Input type="password" placeholder="******" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -451,7 +431,7 @@ const ManageUsers = () => {
                       
                       <DialogFooter className="mt-6">
                         <Button type="submit" disabled={isAddingUser}>
-                          {isAddingUser ? 'Creating...' : 'Create User'}
+                          {isAddingUser ? 'Saving...' : 'Save'}
                         </Button>
                       </DialogFooter>
                     </form>
