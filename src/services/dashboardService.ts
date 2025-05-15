@@ -95,7 +95,7 @@ export const fetchDashboardStats = async (): Promise<{
     const transactions = salesDetailData.map(detail => {
       const sale = salesData.find(s => s.transno === detail.transno);
       const price = latestPrices[detail.prodcode] || 0;
-      const amount = parseFloat(detail.quantity) * price;
+      const amount = parseFloat(String(detail.quantity)) * price;
       
       return {
         id: `${detail.transno}-${detail.prodcode}`,
@@ -103,7 +103,7 @@ export const fetchDashboardStats = async (): Promise<{
         prodcode: detail.prodcode,
         product_name: detail.product?.description || 'Unknown Product',
         unit: detail.product?.unit || 'Unit',
-        quantity: parseFloat(detail.quantity),
+        quantity: parseFloat(String(detail.quantity)),
         price: price,
         amount: amount,
         created_at: sale?.salesdate || new Date().toISOString(),

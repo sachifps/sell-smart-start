@@ -113,15 +113,17 @@ const ManageUsers = () => {
 
   const fetchUserPermissions = async (userId: string) => {
     try {
+      // Type assertion to handle the unknown table
       const { data, error } = await supabase
-        .from('user_permissions')
+        .from('user_permissions' as any)
         .select('*')
         .eq('user_id', userId)
         .single();
       
       if (error) throw error;
       
-      setPermissions(data as UserPermission);
+      // Type assertion to handle the conversion
+      setPermissions(data as unknown as UserPermission);
     } catch (error) {
       console.error('Error fetching user permissions:', error);
       toast({
@@ -142,9 +144,9 @@ const ManageUsers = () => {
         [permission]: value
       });
       
-      // Update in database
+      // Update in database - using type assertion
       const { error } = await supabase
-        .from('user_permissions')
+        .from('user_permissions' as any)
         .update({ [permission]: value, updated_at: new Date().toISOString() })
         .eq('user_id', selectedUser.id);
       
@@ -199,9 +201,9 @@ const ManageUsers = () => {
       
       if (roleError) throw roleError;
       
-      // Update permissions
+      // Update permissions - using type assertion
       const { error: permError } = await supabase
-        .from('user_permissions')
+        .from('user_permissions' as any)
         .upsert({ 
           user_id: userData.id,
           can_edit_sales: true,

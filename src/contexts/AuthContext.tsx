@@ -54,9 +54,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsAdmin(roleData.role === 'admin');
       }
 
-      // Fetch user permissions
+      // Fetch user permissions - using type assertion to handle the unknown table
       const { data: permissionsData, error: permissionsError } = await supabase
-        .from('user_permissions')
+        .from('user_permissions' as any)
         .select('*')
         .eq('user_id', userId)
         .single();
@@ -64,7 +64,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (permissionsError) {
         console.error('Error fetching user permissions:', permissionsError);
       } else if (permissionsData) {
-        setPermissions(permissionsData as UserPermissions);
+        // Type assertion to handle the conversion
+        setPermissions(permissionsData as unknown as UserPermissions);
       }
     } catch (error) {
       console.error('Error in fetchUserRoleAndPermissions:', error);
