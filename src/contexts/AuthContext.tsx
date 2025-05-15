@@ -40,6 +40,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchUserRoleAndPermissions = async (userId: string) => {
     try {
+      console.log('AuthContext - Fetching roles and permissions for userId:', userId);
+      
       // Fetch user role
       const { data: roleData, error: roleError } = await supabase
         .from('user_roles')
@@ -50,13 +52,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (roleError) {
         console.error('Error fetching user role:', roleError);
       } else if (roleData) {
-        setUserRole(roleData.role as UserRole);
-        setIsAdmin(roleData.role === 'admin');
+        console.log('AuthContext - Role data:', roleData);
+        const role = roleData.role as UserRole;
+        setUserRole(role);
+        setIsAdmin(role === 'admin');
+        console.log('AuthContext - Is admin:', role === 'admin');
       }
 
-      // Fetch user permissions using type assertion for the table name
+      // Fetch user permissions
       const { data: permissionsData, error: permissionsError } = await supabase
-        .from('user_permissions' as any)
+        .from('user_permissions')
         .select('*')
         .eq('user_id', userId)
         .single();
@@ -78,7 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
           
           const { data: newPerms, error: createError } = await supabase
-            .from('user_permissions' as any)
+            .from('user_permissions')
             .insert(defaultPerms)
             .select()
             .single();
@@ -86,11 +91,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (createError) {
             console.error('Error creating default permissions:', createError);
           } else if (newPerms) {
+            console.log('AuthContext - Created default permissions:', newPerms);
             setPermissions(newPerms as unknown as UserPermissions);
           }
         }
       } else if (permissionsData) {
-        // Type assertion to handle the conversion
+        console.log('AuthContext - Permissions data:', permissionsData);
         setPermissions(permissionsData as unknown as UserPermissions);
       }
     } catch (error) {
@@ -105,13 +111,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    // Add debug info
+    console.log('AuthContext - Initial setup');
+    
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, currentSession) => {
+        console.log('AuthContext - Auth state changed:', event);
+        console.log('AuthContext - Current session:', currentSession);
+        
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
         
         if (currentSession?.user) {
+          console.log('AuthContext - User logged in:', currentSession.user);
           // Use setTimeout to avoid potential deadlocks
           setTimeout(() => {
             fetchUserRoleAndPermissions(currentSession.user.id);
@@ -126,6 +139,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // THEN check for existing session
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      console.log('AuthContext - Got existing session:', currentSession);
+      
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
       

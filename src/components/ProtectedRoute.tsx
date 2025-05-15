@@ -12,6 +12,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { user, isLoading } = useAuth();
   const location = useLocation();
 
+  // Add debugging console logs
+  useEffect(() => {
+    console.log('ProtectedRoute - Current user:', user);
+    console.log('ProtectedRoute - isLoading:', isLoading);
+  }, [user, isLoading]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -27,9 +33,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   }
 
   if (!user) {
+    console.log('ProtectedRoute - Redirecting to login because no user found');
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  console.log('ProtectedRoute - Access granted, rendering children');
   return <>{children}</>;
 };
 
