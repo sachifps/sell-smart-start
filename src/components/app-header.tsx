@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { Menu, LogOut } from 'lucide-react';
+import { Menu, LogOut, Users } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -19,7 +19,7 @@ interface AppHeaderProps {
 }
 
 export function AppHeader({ currentPath = '' }: AppHeaderProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
@@ -58,6 +58,15 @@ export function AppHeader({ currentPath = '' }: AppHeaderProps) {
             className={currentPath === '/sales-transactions' ? "font-semibold text-primary" : ""}>
             Sales
           </Button>
+          
+          {isAdmin && (
+            <Button variant="ghost" onClick={() => navigate('/manage-users')} 
+              className={currentPath === '/manage-users' ? "font-semibold text-primary" : ""}>
+              <Users className="mr-2 h-4 w-4" />
+              Manage Users
+            </Button>
+          )}
+          
           <span className="text-sm text-muted-foreground">
             Welcome, {user?.user_metadata?.name || user?.email}
           </span>
@@ -109,6 +118,20 @@ export function AppHeader({ currentPath = '' }: AppHeaderProps) {
                 >
                   Sales
                 </Button>
+                
+                {isAdmin && (
+                  <Button 
+                    variant="ghost" 
+                    className="justify-start" 
+                    onClick={() => {
+                      navigate('/manage-users');
+                      setIsOpen(false);
+                    }}
+                  >
+                    <Users className="mr-2 h-4 w-4" />
+                    Manage Users
+                  </Button>
+                )}
                 
                 <Button 
                   variant="ghost" 

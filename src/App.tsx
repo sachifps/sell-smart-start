@@ -14,6 +14,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import SalesTransactions from "./pages/SalesTransactions";
+import ManageUsers from "./pages/ManageUsers";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <SalesTransactions />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/manage-users" 
+                element={
+                  <ProtectedRoute>
+                    <ManageUsers />
                   </ProtectedRoute>
                 } 
               />
