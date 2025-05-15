@@ -47,6 +47,7 @@ import {
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 
 type User = {
   id: string;
@@ -87,6 +88,7 @@ const ManageUsers = () => {
   const [permissions, setPermissions] = useState<UserPermission | null>(null);
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [isAddingUser, setIsAddingUser] = useState(false);
+  const [editingPermissions, setEditingPermissions] = useState(false);
 
   // Initialize form for adding users
   const addUserForm = useForm<AddUserFormValues>({
@@ -118,8 +120,7 @@ const ManageUsers = () => {
       console.error('Error fetching users:', error);
       toast({
         title: "Error",
-        description: "Failed to load users",
-        variant: "destructive"
+        description: "Failed to load users"
       });
     } finally {
       setLoading(false);
@@ -128,6 +129,7 @@ const ManageUsers = () => {
 
   const fetchUserPermissions = async (userId: string) => {
     try {
+      setEditingPermissions(false);
       // Use type assertion for the table name
       const { data, error } = await supabase
         .from('user_permissions')
@@ -143,8 +145,7 @@ const ManageUsers = () => {
       console.error('Error fetching user permissions:', error);
       toast({
         title: "Error",
-        description: "Failed to load user permissions",
-        variant: "destructive"
+        description: "Failed to load user permissions"
       });
     }
   };
@@ -175,8 +176,46 @@ const ManageUsers = () => {
       console.error('Error updating permissions:', error);
       toast({
         title: "Error",
-        description: "Failed to update permissions",
-        variant: "destructive"
+        description: "Failed to update permissions"
+      });
+      
+      // Revert local state if update fails
+      fetchUserPermissions(selectedUser.id);
+    }
+  };
+
+  // Save all permissions at once
+  const saveAllPermissions = async () => {
+    if (!permissions || !selectedUser || !isAdmin) return;
+    
+    try {
+      setEditingPermissions(false);
+      
+      // Update in database
+      const { error } = await supabase
+        .from('user_permissions')
+        .update({ 
+          can_edit_sales: permissions.can_edit_sales,
+          can_delete_sales: permissions.can_delete_sales,
+          can_add_sales: permissions.can_add_sales,
+          can_edit_sales_detail: permissions.can_edit_sales_detail,
+          can_delete_sales_detail: permissions.can_delete_sales_detail,
+          can_add_sales_detail: permissions.can_add_sales_detail,
+          updated_at: new Date().toISOString() 
+        })
+        .eq('user_id', selectedUser.id);
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Success",
+        description: "All user permissions updated"
+      });
+    } catch (error) {
+      console.error('Error updating permissions:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update permissions"
       });
       
       // Revert local state if update fails
@@ -246,12 +285,16 @@ const ManageUsers = () => {
       console.error('Error adding user:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to create user",
-        variant: "destructive"
+        description: error.message || "Failed to create user"
       });
     } finally {
       setIsAddingUser(false);
     }
+  };
+  
+  // Toggle edit mode for permissions
+  const toggleEditMode = () => {
+    setEditingPermissions(!editingPermissions);
   };
 
   return (
@@ -471,83 +514,165 @@ const ManageUsers = () => {
                           
                           {permissions ? (
                             <div className="space-y-4 py-4">
+                              {isAdmin && (
+                                <div className="flex justify-between items-center mb-4">
+                                  <Label htmlFor="edit-mode" className="text-sm font-medium">
+                                    Edit Mode
+                                  </Label>
+                                  <Switch 
+                                    id="edit-mode"
+                                    checked={editingPermissions}
+                                    onCheckedChange={toggleEditMode}
+                                    disabled={!isAdmin}
+                                  />
+                                </div>
+                              )}
+                              
                               <h3 className="font-semibold mb-2">Sales Permissions</h3>
                               <div className="space-y-3">
-                                <div className="flex items-center space-x-2">
-                                  <Checkbox 
-                                    id="add-sales" 
-                                    checked={permissions.can_add_sales}
-                                    onCheckedChange={(checked) => 
-                                      isAdmin && handlePermissionChange('can_add_sales', checked === true)
-                                    }
-                                    disabled={!isAdmin}
-                                  />
-                                  <label htmlFor="add-sales">Can add sales</label>
+                                <div className="flex items-center justify-between">
+                                  <Label htmlFor="add-sales" className="flex-grow">Can add sales</Label>
+                                  {editingPermissions ? (
+                                    <Switch 
+                                      id="add-sales" 
+                                      checked={permissions.can_add_sales}
+                                      onCheckedChange={(checked) => 
+                                        setPermissions({...permissions, can_add_sales: checked})
+                                      }
+                                      disabled={!isAdmin || !editingPermissions}
+                                    />
+                                  ) : (
+                                    <Checkbox 
+                                      id="add-sales" 
+                                      checked={permissions.can_add_sales}
+                                      disabled={true}
+                                    />
+                                  )}
                                 </div>
                                 
-                                <div className="flex items-center space-x-2">
-                                  <Checkbox 
-                                    id="edit-sales" 
-                                    checked={permissions.can_edit_sales}
-                                    onCheckedChange={(checked) => 
-                                      isAdmin && handlePermissionChange('can_edit_sales', checked === true)
-                                    }
-                                    disabled={!isAdmin}
-                                  />
-                                  <label htmlFor="edit-sales">Can edit sales</label>
+                                <div className="flex items-center justify-between">
+                                  <Label htmlFor="edit-sales" className="flex-grow">Can edit sales</Label>
+                                  {editingPermissions ? (
+                                    <Switch 
+                                      id="edit-sales" 
+                                      checked={permissions.can_edit_sales}
+                                      onCheckedChange={(checked) => 
+                                        setPermissions({...permissions, can_edit_sales: checked})
+                                      }
+                                      disabled={!isAdmin || !editingPermissions}
+                                    />
+                                  ) : (
+                                    <Checkbox 
+                                      id="edit-sales" 
+                                      checked={permissions.can_edit_sales}
+                                      disabled={true}
+                                    />
+                                  )}
                                 </div>
                                 
-                                <div className="flex items-center space-x-2">
-                                  <Checkbox 
-                                    id="delete-sales" 
-                                    checked={permissions.can_delete_sales}
-                                    onCheckedChange={(checked) => 
-                                      isAdmin && handlePermissionChange('can_delete_sales', checked === true)
-                                    }
-                                    disabled={!isAdmin}
-                                  />
-                                  <label htmlFor="delete-sales">Can delete sales</label>
+                                <div className="flex items-center justify-between">
+                                  <Label htmlFor="delete-sales" className="flex-grow">Can delete sales</Label>
+                                  {editingPermissions ? (
+                                    <Switch 
+                                      id="delete-sales" 
+                                      checked={permissions.can_delete_sales}
+                                      onCheckedChange={(checked) => 
+                                        setPermissions({...permissions, can_delete_sales: checked})
+                                      }
+                                      disabled={!isAdmin || !editingPermissions}
+                                    />
+                                  ) : (
+                                    <Checkbox 
+                                      id="delete-sales" 
+                                      checked={permissions.can_delete_sales}
+                                      disabled={true}
+                                    />
+                                  )}
                                 </div>
                               </div>
                               
                               <h3 className="font-semibold mb-2 mt-4">Sales Detail Permissions</h3>
                               <div className="space-y-3">
-                                <div className="flex items-center space-x-2">
-                                  <Checkbox 
-                                    id="add-sales-detail" 
-                                    checked={permissions.can_add_sales_detail}
-                                    onCheckedChange={(checked) => 
-                                      isAdmin && handlePermissionChange('can_add_sales_detail', checked === true)
-                                    }
-                                    disabled={!isAdmin}
-                                  />
-                                  <label htmlFor="add-sales-detail">Can add sales details</label>
+                                <div className="flex items-center justify-between">
+                                  <Label htmlFor="add-sales-detail" className="flex-grow">Can add sales details</Label>
+                                  {editingPermissions ? (
+                                    <Switch 
+                                      id="add-sales-detail" 
+                                      checked={permissions.can_add_sales_detail}
+                                      onCheckedChange={(checked) => 
+                                        setPermissions({...permissions, can_add_sales_detail: checked})
+                                      }
+                                      disabled={!isAdmin || !editingPermissions}
+                                    />
+                                  ) : (
+                                    <Checkbox 
+                                      id="add-sales-detail" 
+                                      checked={permissions.can_add_sales_detail}
+                                      disabled={true}
+                                    />
+                                  )}
                                 </div>
                                 
-                                <div className="flex items-center space-x-2">
-                                  <Checkbox 
-                                    id="edit-sales-detail" 
-                                    checked={permissions.can_edit_sales_detail}
-                                    onCheckedChange={(checked) => 
-                                      isAdmin && handlePermissionChange('can_edit_sales_detail', checked === true)
-                                    }
-                                    disabled={!isAdmin}
-                                  />
-                                  <label htmlFor="edit-sales-detail">Can edit sales details</label>
+                                <div className="flex items-center justify-between">
+                                  <Label htmlFor="edit-sales-detail" className="flex-grow">Can edit sales details</Label>
+                                  {editingPermissions ? (
+                                    <Switch 
+                                      id="edit-sales-detail" 
+                                      checked={permissions.can_edit_sales_detail}
+                                      onCheckedChange={(checked) => 
+                                        setPermissions({...permissions, can_edit_sales_detail: checked})
+                                      }
+                                      disabled={!isAdmin || !editingPermissions}
+                                    />
+                                  ) : (
+                                    <Checkbox 
+                                      id="edit-sales-detail" 
+                                      checked={permissions.can_edit_sales_detail}
+                                      disabled={true}
+                                    />
+                                  )}
                                 </div>
                                 
-                                <div className="flex items-center space-x-2">
-                                  <Checkbox 
-                                    id="delete-sales-detail" 
-                                    checked={permissions.can_delete_sales_detail}
-                                    onCheckedChange={(checked) => 
-                                      isAdmin && handlePermissionChange('can_delete_sales_detail', checked === true)
-                                    }
-                                    disabled={!isAdmin}
-                                  />
-                                  <label htmlFor="delete-sales-detail">Can delete sales details</label>
+                                <div className="flex items-center justify-between">
+                                  <Label htmlFor="delete-sales-detail" className="flex-grow">Can delete sales details</Label>
+                                  {editingPermissions ? (
+                                    <Switch 
+                                      id="delete-sales-detail" 
+                                      checked={permissions.can_delete_sales_detail}
+                                      onCheckedChange={(checked) => 
+                                        setPermissions({...permissions, can_delete_sales_detail: checked})
+                                      }
+                                      disabled={!isAdmin || !editingPermissions}
+                                    />
+                                  ) : (
+                                    <Checkbox 
+                                      id="delete-sales-detail" 
+                                      checked={permissions.can_delete_sales_detail}
+                                      disabled={true}
+                                    />
+                                  )}
                                 </div>
                               </div>
+                              
+                              {isAdmin && editingPermissions && (
+                                <div className="flex justify-end mt-4">
+                                  <Button 
+                                    onClick={saveAllPermissions}
+                                    className="mr-2"
+                                  >
+                                    Save Permissions
+                                  </Button>
+                                  <Button 
+                                    variant="outline" 
+                                    onClick={() => {
+                                      setEditingPermissions(false);
+                                      fetchUserPermissions(selectedUser!.id);
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              )}
                               
                               {!isAdmin && (
                                 <div className="mt-4 p-3 bg-muted rounded-md text-sm">
