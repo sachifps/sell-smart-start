@@ -171,6 +171,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (error) throw error;
 
+      // If user is created successfully, set default "user" role
+      if (data.user) {
+        console.log('Creating default "user" role for new user:', data.user.id);
+        
+        // Insert the default "user" role
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .insert({
+            user_id: data.user.id,
+            role: 'user'
+          });
+        
+        if (roleError) {
+          console.error('Error setting default role:', roleError);
+          // We don't throw here to still allow the signup to succeed
+        }
+        
+        // Create default permissions (all false for regular users)
+        const { error: permError } = await supabase
+          .from('user_permissions')
+          .insert({
+            user_id: data.user.id,
+            can_edit_sales: false,
+            can_delete_sales: false,
+            can_add_sales: false,
+            can_edit_sales_detail: false,
+            can_delete_sales_detail: false,
+            can_add_sales_detail: false
+          });
+          
+        if (permError) {
+          console.error('Error setting default permissions:', permError);
+          // We don't throw here to still allow the signup to succeed
+        }
+      }
+
       toast.success('Account created successfully! Please check your email for verification.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Signup failed');
