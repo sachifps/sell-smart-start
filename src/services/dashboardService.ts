@@ -1,7 +1,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/components/ui/use-toast";
 
-// Define all interfaces required by the Dashboard components
 export interface DashboardStats {
   totalSales: number;
   totalTransactions: number;
@@ -14,9 +14,9 @@ export interface DashboardStats {
 export interface Transaction {
   id: string;
   product_name: string;
-  created_at: string;
-  quantity: number;
   amount: number;
+  quantity: number;
+  created_at: string;
 }
 
 export interface TransactionsByDay {
@@ -28,6 +28,7 @@ export interface TransactionsByDay {
 export interface Product {
   prodcode: string;
   description: string;
+  unit: string;
   sales: number;
 }
 
@@ -36,95 +37,203 @@ export interface CategoryData {
   value: number;
 }
 
-// Fetch dashboard statistics 
-export async function fetchDashboardStats() {
+/**
+ * Fetch all dashboard statistics
+ */
+export const fetchDashboardStats = async (): Promise<{
+  stats: DashboardStats;
+  recentTransactions: Transaction[];
+  transactionsByDay: TransactionsByDay[];
+  topProducts: Product[];
+  categoryData: CategoryData[];
+}> => {
   try {
-    // Stats Overview
-    const { data: totalTransactions } = await supabase
-      .from('transactions')
-      .select('*', { count: 'exact' });
-
-    const { data: totalProducts } = await supabase
-      .from('product')
-      .select('*', { count: 'exact' });
-
-    const { data: totalCustomers } = await supabase
-      .from('customer')
-      .select('*', { count: 'exact' });
-    
-    const { data: totalEmployees } = await supabase
-      .from('employee')
-      .select('*', { count: 'exact' });
-
-    const { data: totalDepartments } = await supabase
-      .from('department')
-      .select('*', { count: 'exact' });
-
-    const { data: salesData } = await supabase
-      .from('transactions')
-      .select('amount');
-
-    const totalSales = salesData?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
-
-    // Recent Transactions
-    const { data: recentTransactionsData } = await supabase
-      .from('transactions')
-      .select('id, product_name, created_at, quantity, amount')
-      .order('created_at', { ascending: false })
-      .limit(5);
-
-    const recentTransactions = recentTransactionsData || [];
-
-    // Transactions by Day
-    const { data: transactionsByDayData } = await supabase
-      .from('transactions')
-      .select('created_at, amount')
-      .order('created_at', { ascending: true });
-
-    const last7Days = getLast7Days();
-    const transactionsByDay = transformTransactionsByDay(transactionsByDayData || [], last7Days);
-
-    // Top Products
-    const { data: topProductsData } = await supabase
+    // Fetch transactions from salesdetail and join with product for pricing
+    const { data: salesDetailData, error: salesDetailError } = await supabase
       .from('salesdetail')
       .select(`
-        quantity,
+        transno,
         prodcode,
-        product:prodcode (
-          description
+        quantity,
+        product:prodcode(
+          description,
+          unit
         )
-      `)
-      .limit(5);
+      `);
 
-    const topProducts = transformTopProducts(topProductsData || []);
+    if (salesDetailError) throw salesDetailError;
 
-    // Product Categories
-    const { data: departmentsData } = await supabase
+    // Fetch price history to calculate transaction amounts
+    const { data: priceHistData, error: priceHistError } = await supabase
+      .from('pricehist')
+      .select('*');
+      
+    if (priceHistError) throw priceHistError;
+    
+    // Get latest price for each product
+    const latestPrices: Record<string, number> = {};
+    priceHistData.forEach(price => {
+      const prodcode = price.prodcode;
+      if (!latestPrices[prodcode] || new Date(price.effdate) > new Date(latestPrices[prodcode])) {
+        latestPrices[prodcode] = parseFloat(price.unitprice);
+      }
+    });
+
+    // Fetch sales data to get transaction dates
+    const { data: salesData, error: salesError } = await supabase
+      .from('sales')
+      .select(`
+        transno,
+        salesdate,
+        customer:custno(custname),
+        employee:empno(firstname, lastname)
+      `);
+      
+    if (salesError) throw salesError;
+
+    // Create transaction records by combining salesdetail with prices
+    const transactions = salesDetailData.map(detail => {
+      const sale = salesData.find(s => s.transno === detail.transno);
+      const price = latestPrices[detail.prodcode] || 0;
+      const amount = parseFloat(detail.quantity) * price;
+      
+      return {
+        id: `${detail.transno}-${detail.prodcode}`,
+        transno: detail.transno,
+        prodcode: detail.prodcode,
+        product_name: detail.product?.description || 'Unknown Product',
+        unit: detail.product?.unit || 'Unit',
+        quantity: parseFloat(detail.quantity),
+        price: price,
+        amount: amount,
+        created_at: sale?.salesdate || new Date().toISOString(),
+      };
+    });
+
+    // Calculate total sales from all transactions
+    const totalSales = transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
+    // Get accurate total transaction count (unique transaction numbers)
+    const uniqueTransactions = new Set(transactions.map(t => t.transno));
+    const totalTransactions = uniqueTransactions.size;
+    
+    // Fetch customer count
+    const { count: customerCount, error: customerError } = await supabase
+      .from('customer')
+      .select('custno', { count: 'exact', head: true });
+      
+    if (customerError) throw customerError;
+    
+    // Fetch product count
+    const { count: productCount, error: productError } = await supabase
+      .from('product')
+      .select('prodcode', { count: 'exact', head: true });
+      
+    if (productError) throw productError;
+    
+    // Fetch employee count
+    const { count: employeeCount, error: employeeError } = await supabase
+      .from('employee')
+      .select('empno', { count: 'exact', head: true });
+      
+    if (employeeError) throw employeeError;
+    
+    // Fetch department count
+    const { count: departmentCount, error: departmentError } = await supabase
       .from('department')
-      .select('deptcode, deptname');
-
-    const categoryData = (departmentsData || []).map(dept => ({
-      name: dept.deptname || dept.deptcode,
-      value: Math.floor(Math.random() * 5000) + 1000 // Random value for demonstration
+      .select('deptcode', { count: 'exact', head: true });
+      
+    if (departmentError) throw departmentError;
+    
+    // Process transactions for chart data (group by day)
+    const transactionsGroupedByDay = transactions.reduce((acc: Record<string, TransactionsByDay>, transaction) => {
+      // Ensure we have a date string that we can process
+      let dateStr: string;
+      if (typeof transaction.created_at === 'string') {
+        dateStr = transaction.created_at.split('T')[0]; // For ISO format
+      } else {
+        const date = new Date(transaction.created_at);
+        dateStr = date.toISOString().split('T')[0];
+      }
+      
+      if (!acc[dateStr]) {
+        acc[dateStr] = {
+          date: dateStr,
+          totalAmount: 0,
+          transactionCount: 0
+        };
+      }
+      
+      acc[dateStr].totalAmount += transaction.amount;
+      acc[dateStr].transactionCount += 1;
+      
+      return acc;
+    }, {});
+    
+    // Convert to array and sort by date
+    const chartData = Object.values(transactionsGroupedByDay)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(-7); // Show last 7 days
+    
+    // Calculate top products by sales amount
+    const productSales = transactions.reduce((acc: Record<string, Product>, transaction) => {
+      const { prodcode, product_name, amount, unit } = transaction;
+      
+      if (!acc[prodcode]) {
+        acc[prodcode] = {
+          prodcode: prodcode,
+          description: product_name,
+          unit: unit,
+          sales: 0
+        };
+      }
+      
+      acc[prodcode].sales += amount;
+      
+      return acc;
+    }, {});
+    
+    // Convert to array and sort by sales
+    const topProductsData = Object.values(productSales)
+      .sort((a, b) => b.sales - a.sales)
+      .slice(0, 5);
+      
+    // Create category data for pie chart
+    const categoryDataArray = topProductsData.map(product => ({
+      name: product.description,
+      value: product.sales
     }));
-
-    // Return all data in the expected structure
+    
+    // Sort transactions by date (newest first) for recent transactions list
+    const sortedTransactions = [...transactions].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    
+    // Get 10 most recent transactions
+    const recentTransactionsData = sortedTransactions.slice(0, 10);
+    
     return {
       stats: {
         totalSales,
-        totalTransactions: totalTransactions?.length || 0,
-        totalCustomers: totalCustomers?.length || 0,
-        totalProducts: totalProducts?.length || 0,
-        totalEmployees: totalEmployees?.length || 0,
-        totalDepartments: totalDepartments?.length || 0
+        totalTransactions,
+        totalCustomers: customerCount || 0,
+        totalProducts: productCount || 0,
+        totalEmployees: employeeCount || 0,
+        totalDepartments: departmentCount || 0
       },
-      recentTransactions,
-      transactionsByDay,
-      topProducts,
-      categoryData
+      recentTransactions: recentTransactionsData,
+      transactionsByDay: chartData,
+      topProducts: topProductsData,
+      categoryData: categoryDataArray
     };
   } catch (error) {
-    console.error("Error fetching dashboard data:", error);
+    console.error('Error fetching dashboard data:', error);
+    toast({
+      title: "Error loading dashboard data",
+      description: "There was a problem fetching the data. Please try again later.",
+      variant: "destructive"
+    });
+    
+    // Return empty data in case of error
     return {
       stats: {
         totalSales: 0,
@@ -139,124 +248,5 @@ export async function fetchDashboardStats() {
       topProducts: [],
       categoryData: []
     };
-  }
-}
-
-// Helper functions
-function getLast7Days() {
-  const result = [];
-  for (let i = 6; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    result.push(date.toISOString().split('T')[0]); // Format: YYYY-MM-DD
-  }
-  return result;
-}
-
-function transformTransactionsByDay(transactions: any[], dateRange: string[]) {
-  // Group transactions by date
-  const groupedByDate = transactions.reduce((acc, transaction) => {
-    const date = new Date(transaction.created_at).toISOString().split('T')[0];
-    if (!acc[date]) {
-      acc[date] = {
-        totalAmount: 0,
-        transactionCount: 0
-      };
-    }
-    acc[date].totalAmount += Number(transaction.amount) || 0;
-    acc[date].transactionCount += 1;
-    return acc;
-  }, {});
-
-  // Create array with data for each day in the date range
-  return dateRange.map(date => ({
-    date,
-    totalAmount: groupedByDate[date]?.totalAmount || 0,
-    transactionCount: groupedByDate[date]?.transactionCount || 0
-  }));
-}
-
-function transformTopProducts(salesDetails: any[]) {
-  // Group by product and calculate totals
-  const productMap = new Map();
-  
-  salesDetails.forEach(item => {
-    const productCode = item.prodcode;
-    const quantity = parseFloat(item.quantity?.toString() || '0');
-    
-    if (!productMap.has(productCode)) {
-      productMap.set(productCode, {
-        prodcode: productCode,
-        description: item.product?.description || 'Unknown Product',
-        sales: 0
-      });
-    }
-    
-    const product = productMap.get(productCode);
-    // Estimate sales amount (random for demo purposes)
-    product.sales += quantity * (Math.floor(Math.random() * 100) + 50);
-  });
-  
-  // Convert to array and sort by sales
-  return Array.from(productMap.values())
-    .sort((a, b) => b.sales - a.sales)
-    .slice(0, 5);
-}
-
-// Helper function to check if user is admin
-export const isAdmin = async (): Promise<boolean> => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
-  
-  const { data } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', user.id)
-    .eq('role', 'admin')
-    .single();
-  
-  return !!data;
-};
-
-// Get all users with their roles
-export const fetchAllUsers = async () => {
-  // Get all users from the profiles table
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, email');
-  
-  // Get all user roles
-  const { data: roles } = await supabase
-    .from('user_roles')
-    .select('user_id, role');
-  
-  // Merge data
-  return (profiles || []).map(profile => {
-    const userRoles = roles?.filter(r => r.user_id === profile.id) || [];
-    const isUserAdmin = userRoles.some(r => r.role === 'admin');
-    
-    return {
-      id: profile.id,
-      email: profile.email,
-      isAdmin: isUserAdmin,
-      roles: userRoles.map(r => r.role)
-    };
-  });
-};
-
-// Update user role
-export const updateUserRole = async (userId: string, isAdmin: boolean): Promise<void> => {
-  if (isAdmin) {
-    // Add admin role if it doesn't exist
-    await supabase
-      .from('user_roles')
-      .upsert({ user_id: userId, role: 'admin' }, { onConflict: 'user_id,role' });
-  } else {
-    // Remove admin role if it exists
-    await supabase
-      .from('user_roles')
-      .delete()
-      .eq('user_id', userId)
-      .eq('role', 'admin');
   }
 };
