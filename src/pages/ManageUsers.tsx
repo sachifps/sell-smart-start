@@ -118,6 +118,8 @@ const ManageUsers = () => {
         throw profilesError;
       }
       
+      console.log('Profiles data:', profilesData);
+      
       // Fetch user roles to determine admin status
       const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
@@ -126,6 +128,8 @@ const ManageUsers = () => {
       if (rolesError) {
         throw rolesError;
       }
+      
+      console.log('Roles data:', rolesData);
       
       // Map roles to users with proper typing
       const usersList: User[] = profilesData.map(profile => {
@@ -138,6 +142,7 @@ const ManageUsers = () => {
         };
       });
       
+      console.log('Processed users list:', usersList);
       setUsers(usersList);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -153,7 +158,6 @@ const ManageUsers = () => {
   const fetchUserPermissions = async (userId: string) => {
     try {
       setEditingPermissions(false);
-      // Use type assertion for the table name
       const { data, error } = await supabase
         .from('user_permissions')
         .select('*')
@@ -162,7 +166,6 @@ const ManageUsers = () => {
       
       if (error) throw error;
       
-      // Type assertion to handle the conversion
       setPermissions(data as unknown as UserPermission);
     } catch (error) {
       console.error('Error fetching user permissions:', error);
@@ -466,7 +469,6 @@ const ManageUsers = () => {
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Created At</TableHead>
-                  <TableHead>Last Login</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -487,9 +489,6 @@ const ManageUsers = () => {
                       </div>
                     </TableCell>
                     <TableCell>{user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}</TableCell>
-                    <TableCell>
-                      {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleDateString() : 'Never'}
-                    </TableCell>
                     <TableCell className="text-right">
                       <Dialog>
                         <DialogTrigger asChild>
@@ -699,7 +698,7 @@ const ManageUsers = () => {
                 ))}
                 {users.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <AlertCircle className="h-5 w-5 text-muted-foreground" />
                         <p>No users found</p>
