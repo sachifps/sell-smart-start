@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, getAllUsersWithClassification } from '@/integrations/supabase/client';
 import { AppHeader } from '@/components/app-header';
 import { 
   Table, 
@@ -84,8 +85,6 @@ const ManageUsers = () => {
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<UserPermission | null>(null);
-  const [newAdminEmail, setNewAdminEmail] = useState('');
-  const [addingAdmin, setAddingAdmin] = useState(false);
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [isAddingUser, setIsAddingUser] = useState(false);
 
@@ -108,79 +107,15 @@ const ManageUsers = () => {
     try {
       setLoading(true);
       
-      // Get all users from Supabase auth
-      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+      const { data: users, error } = await getAllUsersWithClassification();
       
-      if (authError) {
-        console.error('Error fetching auth users:', authError);
-        // Fallback to using profiles table
-        return fetchUsersFromProfiles();
+      if (error) {
+        throw error;
       }
       
-      if (authUsers && authUsers.users) {
-        // Get user roles
-        const { data: roles, error: rolesError } = await supabase
-          .from('user_roles')
-          .select('user_id, role');
-        
-        if (rolesError) throw rolesError;
-        
-        // Combine data
-        const usersList = authUsers.users.map(authUser => {
-          const userRole = roles?.find(role => role.user_id === authUser.id);
-          return {
-            id: authUser.id,
-            email: authUser.email || 'No email',
-            role: userRole ? userRole.role : 'user',
-            last_sign_in_at: authUser.last_sign_in_at,
-            created_at: authUser.created_at
-          };
-        });
-        
-        setUsers(usersList);
-        setLoading(false);
-      } else {
-        // Fallback to using profiles table
-        fetchUsersFromProfiles();
-      }
+      setUsers(users || []);
     } catch (error) {
-      console.error('Error in fetchUsers:', error);
-      // Fallback to using profiles table
-      fetchUsersFromProfiles();
-    }
-  };
-  
-  // Fallback method to fetch users from profiles table
-  const fetchUsersFromProfiles = async () => {
-    try {
-      // Get all users from profiles table
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, email, created_at');
-      
-      if (profilesError) throw profilesError;
-      
-      // Get user roles
-      const { data: roles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, role');
-      
-      if (rolesError) throw rolesError;
-      
-      // Combine data
-      const usersList = profiles.map(profile => {
-        const userRole = roles?.find(role => role.user_id === profile.id);
-        return {
-          id: profile.id,
-          email: profile.email,
-          role: userRole ? userRole.role : 'user',
-          created_at: profile.created_at
-        };
-      });
-      
-      setUsers(usersList);
-    } catch (error) {
-      console.error('Error fetching users from profiles:', error);
+      console.error('Error fetching users:', error);
       toast({
         title: "Error",
         description: "Failed to load users",
@@ -249,74 +184,7 @@ const ManageUsers = () => {
     }
   };
 
-  const handleAddAdmin = async () => {
-    if (!newAdminEmail || addingAdmin || !isAdmin) return;
-    
-    try {
-      setAddingAdmin(true);
-      
-      // First check if user exists
-      const { data: userData, error: userError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', newAdminEmail)
-        .single();
-      
-      if (userError) {
-        toast({
-          title: "Error",
-          description: "User not found with this email",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      // Add admin role
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .upsert({ 
-          user_id: userData.id, 
-          role: 'admin' 
-        }, { onConflict: 'user_id,role' });
-      
-      if (roleError) throw roleError;
-      
-      // Update permissions
-      const { error: permError } = await supabase
-        .from('user_permissions')
-        .upsert({ 
-          user_id: userData.id,
-          can_edit_sales: true,
-          can_delete_sales: true,
-          can_add_sales: true,
-          can_edit_sales_detail: true,
-          can_delete_sales_detail: true,
-          can_add_sales_detail: true,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id' });
-      
-      if (permError) throw permError;
-      
-      toast({
-        title: "Success",
-        description: `${newAdminEmail} is now an admin`
-      });
-      
-      setNewAdminEmail('');
-      fetchUsers();
-    } catch (error) {
-      console.error('Error adding admin:', error);
-      toast({
-        title: "Error",
-        description: "Failed to add admin user",
-        variant: "destructive"
-      });
-    } finally {
-      setAddingAdmin(false);
-    }
-  };
-
-  // New function to add a user
+  // Function to add a new user
   const handleAddUser = async (values: AddUserFormValues) => {
     if (!isAdmin) return;
     
@@ -394,7 +262,7 @@ const ManageUsers = () => {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold mb-1">Manage Users</h1>
-            <p className="text-muted-foreground">Configure user roles and permissions</p>
+            <p className="text-muted-foreground">Users automatically classified by email patterns</p>
           </div>
           
           <div className="flex space-x-4">
@@ -408,145 +276,111 @@ const ManageUsers = () => {
             </Button>
             
             {isAdmin && (
-              <>
-                <Dialog open={addUserOpen} onOpenChange={setAddUserOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="flex items-center">
-                      <UserPlus className="mr-2 h-4 w-4" />
-                      Add User
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Add New User</DialogTitle>
-                      <DialogDescription>
-                        Create a new user account with specified role and permissions.
-                      </DialogDescription>
-                    </DialogHeader>
-                    
-                    <Form {...addUserForm}>
-                      <form onSubmit={addUserForm.handleSubmit(handleAddUser)} className="space-y-4 py-2">
-                        <FormField
-                          control={addUserForm.control}
-                          name="name"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Name</FormLabel>
-                              <FormControl>
-                                <div className="flex items-center">
-                                  <User className="mr-2 h-4 w-4 text-muted-foreground" />
-                                  <Input placeholder="John Doe" {...field} />
-                                </div>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        
-                        <FormField
-                          control={addUserForm.control}
-                          name="email"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Email</FormLabel>
-                              <FormControl>
-                                <div className="flex items-center">
-                                  <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
-                                  <Input placeholder="user@example.com" {...field} />
-                                </div>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        
-                        <FormField
-                          control={addUserForm.control}
-                          name="password"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Password</FormLabel>
-                              <FormControl>
-                                <div className="flex items-center">
-                                  <Lock className="mr-2 h-4 w-4 text-muted-foreground" />
-                                  <Input type="password" placeholder="******" {...field} />
-                                </div>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        
-                        <FormField
-                          control={addUserForm.control}
-                          name="role"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>User Role</FormLabel>
-                              <Select 
-                                onValueChange={field.onChange} 
-                                defaultValue={field.value}
-                              >
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select a role" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="user">Regular User</SelectItem>
-                                  <SelectItem value="admin">Administrator</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <FormDescription>
-                                Admins have full access to all functionality
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        
-                        <DialogFooter className="mt-6">
-                          <Button type="submit" disabled={isAddingUser}>
-                            {isAddingUser ? 'Creating...' : 'Create User'}
-                          </Button>
-                        </DialogFooter>
-                      </form>
-                    </Form>
-                  </DialogContent>
-                </Dialog>
-                
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button className="flex items-center">
-                      <UserPlus className="mr-2 h-4 w-4" />
-                      Add Admin
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Add New Admin</DialogTitle>
-                      <DialogDescription>
-                        Enter the email of the user you want to assign admin privileges.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="py-4">
-                      <Input
-                        placeholder="user@example.com"
-                        value={newAdminEmail}
-                        onChange={(e) => setNewAdminEmail(e.target.value)}
+              <Dialog open={addUserOpen} onOpenChange={setAddUserOpen}>
+                <DialogTrigger asChild>
+                  <Button className="flex items-center">
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Add User
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Add New User</DialogTitle>
+                    <DialogDescription>
+                      Create a new user account with specified role and permissions.
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <Form {...addUserForm}>
+                    <form onSubmit={addUserForm.handleSubmit(handleAddUser)} className="space-y-4 py-2">
+                      <FormField
+                        control={addUserForm.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Name</FormLabel>
+                            <FormControl>
+                              <div className="flex items-center">
+                                <User className="mr-2 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="John Doe" {...field} />
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                    </div>
-                    <DialogFooter>
-                      <Button 
-                        onClick={handleAddAdmin} 
-                        disabled={!newAdminEmail || addingAdmin}
-                      >
-                        {addingAdmin ? 'Adding...' : 'Add Admin'}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </>
+                      
+                      <FormField
+                        control={addUserForm.control}
+                        name="email"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Email</FormLabel>
+                            <FormControl>
+                              <div className="flex items-center">
+                                <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="user@example.com" {...field} />
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={addUserForm.control}
+                        name="password"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Password</FormLabel>
+                            <FormControl>
+                              <div className="flex items-center">
+                                <Lock className="mr-2 h-4 w-4 text-muted-foreground" />
+                                <Input type="password" placeholder="******" {...field} />
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={addUserForm.control}
+                        name="role"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>User Role</FormLabel>
+                            <Select 
+                              onValueChange={field.onChange} 
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select a role" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="user">Regular User</SelectItem>
+                                <SelectItem value="admin">Administrator</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormDescription>
+                              Admins have full access to all functionality
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <DialogFooter className="mt-6">
+                        <Button type="submit" disabled={isAddingUser}>
+                          {isAddingUser ? 'Creating...' : 'Create User'}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
             )}
           </div>
         </div>
@@ -565,6 +399,7 @@ const ManageUsers = () => {
                 <TableRow>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Classification Reason</TableHead>
                   <TableHead>Created At</TableHead>
                   <TableHead>Last Login</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -585,6 +420,24 @@ const ManageUsers = () => {
                           <span>User</span>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {user.role === 'admin' ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-xs text-muted-foreground cursor-help underline-dotted">
+                                Matched admin pattern
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p>Email matched one of the admin patterns: contains "@admin.", starts with "admin@", or ends with "@company.com"</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No admin pattern match</span>
+                      )}
                     </TableCell>
                     <TableCell>{user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}</TableCell>
                     <TableCell>
@@ -717,7 +570,7 @@ const ManageUsers = () => {
                 ))}
                 {users.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <AlertCircle className="h-5 w-5 text-muted-foreground" />
                         <p>No users found</p>

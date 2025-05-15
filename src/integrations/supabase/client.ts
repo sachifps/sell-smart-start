@@ -53,3 +53,85 @@ export const getSalesWithUserInfo = async (includeDeleted = false) => {
     
   return await query.order('created_at', { ascending: false });
 };
+
+// New helper function to classify users based on email domains
+export const classifyUserRole = (email: string): 'admin' | 'user' => {
+  // Convert email to lowercase for case-insensitive comparison
+  const lowerEmail = email.toLowerCase();
+  
+  // Define patterns for admin classification
+  const adminPatterns = [
+    /@admin\./,         // Matches emails like user@admin.domain.com
+    /admin@/,           // Matches emails that start with admin@
+    /@company\.com$/    // Example: matches emails ending with @company.com
+  ];
+  
+  // Check if email matches any admin patterns
+  for (const pattern of adminPatterns) {
+    if (pattern.test(lowerEmail)) {
+      return 'admin';
+    }
+  }
+  
+  // Default to regular user
+  return 'user';
+};
+
+// Helper function to get all users with their classified roles
+export const getAllUsersWithClassification = async () => {
+  try {
+    // Try to use admin API first (requires service role token)
+    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+    
+    if (authError) {
+      // Fallback to profiles table if admin API access fails
+      return await getUsersFromProfiles();
+    }
+    
+    if (!authUsers || !authUsers.users) {
+      return { data: [], error: new Error('No users found') };
+    }
+    
+    const users = authUsers.users.map(user => {
+      return {
+        id: user.id,
+        email: user.email || 'No email',
+        role: classifyUserRole(user.email || ''),
+        last_sign_in_at: user.last_sign_in_at,
+        created_at: user.created_at
+      };
+    });
+    
+    return { data: users, error: null };
+  } catch (error) {
+    console.error('Error getting all users:', error);
+    return await getUsersFromProfiles();
+  }
+};
+
+// Helper function to get users from profiles as fallback
+const getUsersFromProfiles = async () => {
+  try {
+    const { data: profiles, error } = await supabase
+      .from('profiles')
+      .select('id, email, created_at');
+    
+    if (error) {
+      throw error;
+    }
+    
+    const users = profiles.map(profile => {
+      return {
+        id: profile.id,
+        email: profile.email,
+        role: classifyUserRole(profile.email),
+        created_at: profile.created_at
+      };
+    });
+    
+    return { data: users, error: null };
+  } catch (error) {
+    console.error('Error getting users from profiles:', error);
+    return { data: [], error };
+  }
+};
