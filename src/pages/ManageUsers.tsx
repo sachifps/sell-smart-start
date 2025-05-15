@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase, getAllUsersWithClassification } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { AppHeader } from '@/components/app-header';
 import { 
   Table, 
@@ -109,13 +109,36 @@ const ManageUsers = () => {
     try {
       setLoading(true);
       
-      const { data: users, error } = await getAllUsersWithClassification();
+      // Fetch all users from profiles table
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, email, created_at');
       
-      if (error) {
-        throw error;
+      if (profilesError) {
+        throw profilesError;
       }
       
-      setUsers(users || []);
+      // Fetch user roles to determine admin status
+      const { data: rolesData, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id, role');
+        
+      if (rolesError) {
+        throw rolesError;
+      }
+      
+      // Map roles to users
+      const usersList = profilesData.map(profile => {
+        const userRole = rolesData.find(role => role.user_id === profile.id);
+        return {
+          id: profile.id,
+          email: profile.email || 'No email',
+          role: userRole?.role === 'admin' ? 'admin' : 'user',
+          created_at: profile.created_at
+        };
+      });
+      
+      setUsers(usersList);
     } catch (error) {
       console.error('Error fetching users:', error);
       toast({
@@ -305,7 +328,7 @@ const ManageUsers = () => {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold mb-1">Manage Users</h1>
-            <p className="text-muted-foreground">Users automatically classified by email patterns</p>
+            <p className="text-muted-foreground">All users from Supabase profiles table</p>
           </div>
           
           <div className="flex space-x-4">
@@ -442,7 +465,6 @@ const ManageUsers = () => {
                 <TableRow>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
-                  <TableHead>Classification Reason</TableHead>
                   <TableHead>Created At</TableHead>
                   <TableHead>Last Login</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -463,24 +485,6 @@ const ManageUsers = () => {
                           <span>User</span>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {user.role === 'admin' ? (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="text-xs text-muted-foreground cursor-help underline-dotted">
-                                Matched admin pattern
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
-                              <p>Email matched one of the admin patterns: contains "@admin.", starts with "admin@", or ends with "@company.com"</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">No admin pattern match</span>
-                      )}
                     </TableCell>
                     <TableCell>{user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}</TableCell>
                     <TableCell>
@@ -695,7 +699,7 @@ const ManageUsers = () => {
                 ))}
                 {users.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <AlertCircle className="h-5 w-5 text-muted-foreground" />
                         <p>No users found</p>
