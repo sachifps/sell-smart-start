@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { supabase, ensureUserProfile } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 
 type UserRole = 'admin' | 'user';
@@ -28,7 +28,6 @@ type AuthContextType = {
   refreshPermissions: () => Promise<void>;
 };
 
-// Create the context with an undefined initial value
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -108,14 +107,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, currentSession) => {
+      (event, currentSession) => {
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
         
         if (currentSession?.user) {
-          // Ensure user has a profile
-          await ensureUserProfile(currentSession.user.id, currentSession.user.email || '');
-          
           // Use setTimeout to avoid potential deadlocks
           setTimeout(() => {
             fetchUserRoleAndPermissions(currentSession.user.id);
@@ -129,13 +125,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(async ({ data: { session: currentSession } }) => {
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
       
       if (currentSession?.user) {
-        // Ensure user has a profile
-        await ensureUserProfile(currentSession.user.id, currentSession.user.email || '');
         fetchUserRoleAndPermissions(currentSession.user.id);
       }
       
@@ -162,11 +156,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (error) throw error;
 
-      // Ensure profile is created - in case the DB trigger doesn't work
-      if (data.user) {
-        await ensureUserProfile(data.user.id, email);
-      }
-
       toast.success('Account created successfully! Please check your email for verification.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Signup failed');
@@ -180,17 +169,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setIsLoading(true);
       
-      const { error, data } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       
       if (error) throw error;
-      
-      // Ensure profile is created
-      if (data.user) {
-        await ensureUserProfile(data.user.id, email);
-      }
       
       toast.success('Login successful');
     } catch (error) {

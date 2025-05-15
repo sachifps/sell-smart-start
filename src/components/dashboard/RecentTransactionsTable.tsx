@@ -29,9 +29,9 @@ export function RecentTransactionsTable({ transactions, onViewAll }: RecentTrans
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Customer</TableHead>
+              <TableHead>Product</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Quantity</TableHead>
               <TableHead className="text-right">Amount</TableHead>
             </TableRow>
           </TableHeader>
@@ -39,10 +39,10 @@ export function RecentTransactionsTable({ transactions, onViewAll }: RecentTrans
             {transactions.length > 0 ? (
               transactions.map((transaction) => (
                 <TableRow key={transaction.id}>
-                  <TableCell className="font-medium">{transaction.customer}</TableCell>
-                  <TableCell>{transaction.date.toLocaleString()}</TableCell>
-                  <TableCell>{transaction.status}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(transaction.amount)}</TableCell>
+                  <TableCell className="font-medium">{transaction.product_name}</TableCell>
+                  <TableCell>{formatFullDate(transaction.created_at)}</TableCell>
+                  <TableCell>{transaction.quantity}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(Number(transaction.amount))}</TableCell>
                 </TableRow>
               ))
             ) : (

@@ -25,10 +25,10 @@ export function TopProductsTable({ products }: TopProductsTableProps) {
           </TableHeader>
           <TableBody>
             {products.map((product) => (
-              <TableRow key={product.id}>
-                <TableCell className="font-medium">{product.id}</TableCell>
-                <TableCell>{product.name}</TableCell>
-                <TableCell className="text-right">{formatCurrency(product.revenue)}</TableCell>
+              <TableRow key={product.prodcode}>
+                <TableCell className="font-medium">{product.prodcode}</TableCell>
+                <TableCell>{product.description}</TableCell>
+                <TableCell className="text-right">{formatCurrency(product.sales)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
