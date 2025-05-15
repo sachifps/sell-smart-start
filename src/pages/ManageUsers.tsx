@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase, getAllUsersWithClassification } from '@/integrations/supabase/client';
+import { supabase, classifyUserRole, getAllUsersWithClassification } from '@/integrations/supabase/client';
 import { AppHeader } from '@/components/app-header';
 import { 
   Table, 
@@ -229,6 +229,18 @@ const ManageUsers = () => {
           });
         
         if (permError) throw permError;
+        
+        // Ensure profile is created
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: userData.user.id,
+            email: values.email
+          });
+          
+        if (profileError && profileError.code !== '23505') { // Ignore duplicate key errors
+          console.warn("Profile creation warning:", profileError);
+        }
         
         toast({
           title: "Success",

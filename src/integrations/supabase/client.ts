@@ -77,47 +77,20 @@ export const classifyUserRole = (email: string): 'admin' | 'user' => {
   return 'user';
 };
 
-// Helper function to get all users with their classified roles
+// Enhanced helper function to get all users with their classified roles using profiles table
 export const getAllUsersWithClassification = async () => {
   try {
-    // Try to use admin API first (requires service role token)
-    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
-    
-    if (authError) {
-      // Fallback to profiles table if admin API access fails
-      return await getUsersFromProfiles();
-    }
-    
-    if (!authUsers || !authUsers.users) {
-      return { data: [], error: new Error('No users found') };
-    }
-    
-    const users = authUsers.users.map(user => {
-      return {
-        id: user.id,
-        email: user.email || 'No email',
-        role: classifyUserRole(user.email || ''),
-        last_sign_in_at: user.last_sign_in_at,
-        created_at: user.created_at
-      };
-    });
-    
-    return { data: users, error: null };
-  } catch (error) {
-    console.error('Error getting all users:', error);
-    return await getUsersFromProfiles();
-  }
-};
-
-// Helper function to get users from profiles as fallback
-const getUsersFromProfiles = async () => {
-  try {
+    // Always fetch from the profiles table now
     const { data: profiles, error } = await supabase
       .from('profiles')
       .select('id, email, created_at');
     
     if (error) {
       throw error;
+    }
+    
+    if (!profiles || profiles.length === 0) {
+      return { data: [], error: null };
     }
     
     const users = profiles.map(profile => {
@@ -133,5 +106,37 @@ const getUsersFromProfiles = async () => {
   } catch (error) {
     console.error('Error getting users from profiles:', error);
     return { data: [], error };
+  }
+};
+
+// Helper function to ensure a profile exists for a user
+export const ensureUserProfile = async (userId: string, email: string) => {
+  try {
+    // Check if profile exists
+    const { data: existingProfile, error: checkError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', userId)
+      .single();
+    
+    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = 'No rows found'
+      throw checkError;
+    }
+    
+    // If profile doesn't exist, create it
+    if (!existingProfile) {
+      const { error: insertError } = await supabase
+        .from('profiles')
+        .insert({ id: userId, email });
+      
+      if (insertError) throw insertError;
+      
+      console.log(`Created profile for user ${userId} with email ${email}`);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error ensuring user profile:', error);
+    return false;
   }
 };

@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 const Signup = () => {
   const [name, setName] = useState('');
@@ -45,7 +46,9 @@ const Signup = () => {
     try {
       setIsSubmitting(true);
       await signup(name, email, password);
-      // The signup process will handle redirects based on user state
+      toast.success('Account created! You will be redirected to the login page.');
+      // Redirect to login after successful signup
+      setTimeout(() => navigate('/login'), 1500);
     } catch (error) {
       console.error('Signup error:', error);
       setIsSubmitting(false);
