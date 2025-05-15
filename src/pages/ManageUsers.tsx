@@ -57,18 +57,8 @@ const ManageUsers = () => {
   const [addingAdmin, setAddingAdmin] = useState(false);
 
   useEffect(() => {
-    if (!isAdmin) {
-      toast({
-        title: "Access Denied",
-        description: "You don't have permission to access this page",
-        variant: "destructive"
-      });
-      navigate('/dashboard');
-      return;
-    }
-
     fetchUsers();
-  }, [isAdmin, navigate]);
+  }, []);
 
   const fetchUsers = async () => {
     try {
@@ -113,7 +103,7 @@ const ManageUsers = () => {
 
   const fetchUserPermissions = async (userId: string) => {
     try {
-      // Type assertion to handle the unknown table
+      // Use type assertion for the table name
       const { data, error } = await supabase
         .from('user_permissions' as any)
         .select('*')
@@ -135,7 +125,7 @@ const ManageUsers = () => {
   };
 
   const handlePermissionChange = async (permission: keyof UserPermission, value: boolean) => {
-    if (!permissions || !selectedUser) return;
+    if (!permissions || !selectedUser || !isAdmin) return;
     
     try {
       // Update local state first for responsive UI
@@ -170,7 +160,7 @@ const ManageUsers = () => {
   };
 
   const handleAddAdmin = async () => {
-    if (!newAdminEmail || addingAdmin) return;
+    if (!newAdminEmail || addingAdmin || !isAdmin) return;
     
     try {
       setAddingAdmin(true);
@@ -257,37 +247,39 @@ const ManageUsers = () => {
               Refresh
             </Button>
             
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button className="flex items-center">
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Add Admin
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add New Admin</DialogTitle>
-                  <DialogDescription>
-                    Enter the email of the user you want to assign admin privileges.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="py-4">
-                  <Input
-                    placeholder="user@example.com"
-                    value={newAdminEmail}
-                    onChange={(e) => setNewAdminEmail(e.target.value)}
-                  />
-                </div>
-                <DialogFooter>
-                  <Button 
-                    onClick={handleAddAdmin} 
-                    disabled={!newAdminEmail || addingAdmin}
-                  >
-                    {addingAdmin ? 'Adding...' : 'Add Admin'}
+            {isAdmin && (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="flex items-center">
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Add Admin
                   </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add New Admin</DialogTitle>
+                    <DialogDescription>
+                      Enter the email of the user you want to assign admin privileges.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="py-4">
+                    <Input
+                      placeholder="user@example.com"
+                      value={newAdminEmail}
+                      onChange={(e) => setNewAdminEmail(e.target.value)}
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button 
+                      onClick={handleAddAdmin} 
+                      disabled={!newAdminEmail || addingAdmin}
+                    >
+                      {addingAdmin ? 'Adding...' : 'Add Admin'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </div>
         
@@ -343,7 +335,10 @@ const ManageUsers = () => {
                           <DialogHeader>
                             <DialogTitle>User Permissions</DialogTitle>
                             <DialogDescription>
-                              Configure permissions for {selectedUser?.email}
+                              {isAdmin 
+                                ? `Configure permissions for ${selectedUser?.email}`
+                                : `View permissions for ${selectedUser?.email}`
+                              }
                             </DialogDescription>
                           </DialogHeader>
                           
@@ -356,8 +351,9 @@ const ManageUsers = () => {
                                     id="add-sales" 
                                     checked={permissions.can_add_sales}
                                     onCheckedChange={(checked) => 
-                                      handlePermissionChange('can_add_sales', checked === true)
+                                      isAdmin && handlePermissionChange('can_add_sales', checked === true)
                                     }
+                                    disabled={!isAdmin}
                                   />
                                   <label htmlFor="add-sales">Can add sales</label>
                                 </div>
@@ -367,8 +363,9 @@ const ManageUsers = () => {
                                     id="edit-sales" 
                                     checked={permissions.can_edit_sales}
                                     onCheckedChange={(checked) => 
-                                      handlePermissionChange('can_edit_sales', checked === true)
+                                      isAdmin && handlePermissionChange('can_edit_sales', checked === true)
                                     }
+                                    disabled={!isAdmin}
                                   />
                                   <label htmlFor="edit-sales">Can edit sales</label>
                                 </div>
@@ -378,8 +375,9 @@ const ManageUsers = () => {
                                     id="delete-sales" 
                                     checked={permissions.can_delete_sales}
                                     onCheckedChange={(checked) => 
-                                      handlePermissionChange('can_delete_sales', checked === true)
+                                      isAdmin && handlePermissionChange('can_delete_sales', checked === true)
                                     }
+                                    disabled={!isAdmin}
                                   />
                                   <label htmlFor="delete-sales">Can delete sales</label>
                                 </div>
@@ -392,8 +390,9 @@ const ManageUsers = () => {
                                     id="add-sales-detail" 
                                     checked={permissions.can_add_sales_detail}
                                     onCheckedChange={(checked) => 
-                                      handlePermissionChange('can_add_sales_detail', checked === true)
+                                      isAdmin && handlePermissionChange('can_add_sales_detail', checked === true)
                                     }
+                                    disabled={!isAdmin}
                                   />
                                   <label htmlFor="add-sales-detail">Can add sales details</label>
                                 </div>
@@ -403,8 +402,9 @@ const ManageUsers = () => {
                                     id="edit-sales-detail" 
                                     checked={permissions.can_edit_sales_detail}
                                     onCheckedChange={(checked) => 
-                                      handlePermissionChange('can_edit_sales_detail', checked === true)
+                                      isAdmin && handlePermissionChange('can_edit_sales_detail', checked === true)
                                     }
+                                    disabled={!isAdmin}
                                   />
                                   <label htmlFor="edit-sales-detail">Can edit sales details</label>
                                 </div>
@@ -414,12 +414,19 @@ const ManageUsers = () => {
                                     id="delete-sales-detail" 
                                     checked={permissions.can_delete_sales_detail}
                                     onCheckedChange={(checked) => 
-                                      handlePermissionChange('can_delete_sales_detail', checked === true)
+                                      isAdmin && handlePermissionChange('can_delete_sales_detail', checked === true)
                                     }
+                                    disabled={!isAdmin}
                                   />
                                   <label htmlFor="delete-sales-detail">Can delete sales details</label>
                                 </div>
                               </div>
+                              
+                              {!isAdmin && (
+                                <div className="mt-4 p-3 bg-muted rounded-md text-sm">
+                                  <p>You are viewing permissions in read-only mode. Only administrators can modify permissions.</p>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <div className="py-4">

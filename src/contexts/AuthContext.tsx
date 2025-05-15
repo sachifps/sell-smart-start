@@ -54,7 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsAdmin(roleData.role === 'admin');
       }
 
-      // Fetch user permissions - using type assertion to handle the unknown table
+      // Fetch user permissions using type assertion for the table name
       const { data: permissionsData, error: permissionsError } = await supabase
         .from('user_permissions' as any)
         .select('*')
@@ -63,6 +63,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (permissionsError) {
         console.error('Error fetching user permissions:', permissionsError);
+        
+        // If permissions don't exist yet, create default permissions for the user
+        if (permissionsError.code === 'PGRST116') { // No rows found
+          const isUserAdmin = roleData?.role === 'admin';
+          const defaultPerms = {
+            user_id: userId,
+            can_edit_sales: isUserAdmin,
+            can_delete_sales: isUserAdmin,
+            can_add_sales: isUserAdmin,
+            can_edit_sales_detail: isUserAdmin,
+            can_delete_sales_detail: isUserAdmin,
+            can_add_sales_detail: isUserAdmin
+          };
+          
+          const { data: newPerms, error: createError } = await supabase
+            .from('user_permissions' as any)
+            .insert(defaultPerms)
+            .select()
+            .single();
+            
+          if (createError) {
+            console.error('Error creating default permissions:', createError);
+          } else if (newPerms) {
+            setPermissions(newPerms as unknown as UserPermissions);
+          }
+        }
       } else if (permissionsData) {
         // Type assertion to handle the conversion
         setPermissions(permissionsData as unknown as UserPermissions);

@@ -345,6 +345,9 @@ export type Database = {
         Row: {
           amount: number
           created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           price: number
           product_code: string
@@ -352,10 +355,14 @@ export type Database = {
           quantity: number
           unit: string
           updated_at: string | null
+          updated_by: string | null
         }
         Insert: {
           amount: number
           created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           price: number
           product_code: string
@@ -363,10 +370,14 @@ export type Database = {
           quantity: number
           unit: string
           updated_at?: string | null
+          updated_by?: string | null
         }
         Update: {
           amount?: number
           created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           price?: number
           product_code?: string
@@ -374,6 +385,46 @@ export type Database = {
           quantity?: number
           unit?: string
           updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      user_permissions: {
+        Row: {
+          can_add_sales: boolean
+          can_add_sales_detail: boolean
+          can_delete_sales: boolean
+          can_delete_sales_detail: boolean
+          can_edit_sales: boolean
+          can_edit_sales_detail: boolean
+          created_at: string | null
+          id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          can_add_sales?: boolean
+          can_add_sales_detail?: boolean
+          can_delete_sales?: boolean
+          can_delete_sales_detail?: boolean
+          can_edit_sales?: boolean
+          can_edit_sales_detail?: boolean
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          can_add_sales?: boolean
+          can_add_sales_detail?: boolean
+          can_delete_sales?: boolean
+          can_delete_sales_detail?: boolean
+          can_edit_sales?: boolean
+          can_edit_sales_detail?: boolean
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }

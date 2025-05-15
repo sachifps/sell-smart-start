@@ -59,13 +59,12 @@ export function AppHeader({ currentPath = '' }: AppHeaderProps) {
             Sales
           </Button>
           
-          {isAdmin && (
-            <Button variant="ghost" onClick={() => navigate('/manage-users')} 
-              className={currentPath === '/manage-users' ? "font-semibold text-primary" : ""}>
-              <Users className="mr-2 h-4 w-4" />
-              Manage Users
-            </Button>
-          )}
+          {/* Show ManageUsers tab for all users */}
+          <Button variant="ghost" onClick={() => navigate('/manage-users')} 
+            className={currentPath === '/manage-users' ? "font-semibold text-primary" : ""}>
+            <Users className="mr-2 h-4 w-4" />
+            Manage Users
+          </Button>
           
           <span className="text-sm text-muted-foreground">
             Welcome, {user?.user_metadata?.name || user?.email}
@@ -119,19 +118,18 @@ export function AppHeader({ currentPath = '' }: AppHeaderProps) {
                   Sales
                 </Button>
                 
-                {isAdmin && (
-                  <Button 
-                    variant="ghost" 
-                    className="justify-start" 
-                    onClick={() => {
-                      navigate('/manage-users');
-                      setIsOpen(false);
-                    }}
-                  >
-                    <Users className="mr-2 h-4 w-4" />
-                    Manage Users
-                  </Button>
-                )}
+                {/* Show ManageUsers tab for all users in mobile view too */}
+                <Button 
+                  variant="ghost" 
+                  className="justify-start" 
+                  onClick={() => {
+                    navigate('/manage-users');
+                    setIsOpen(false);
+                  }}
+                >
+                  <Users className="mr-2 h-4 w-4" />
+                  Manage Users
+                </Button>
                 
                 <Button 
                   variant="ghost" 
