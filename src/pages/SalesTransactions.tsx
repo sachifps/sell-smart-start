@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChevronDown, ChevronUp, Edit, Plus, Trash2, Search, ArrowUpDown, Info } from 'lucide-react';
-import { supabase, trackSalesChanges } from '@/integrations/supabase/client';
+import { supabase, trackSalesChanges, AuditLogEntry } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -93,17 +93,8 @@ type SalesTransaction = {
 type SortField = 'transno' | 'salesdate' | 'custname' | 'empname' | 'totalPrice';
 type SortOrder = 'asc' | 'desc';
 
-type AuditLog = {
-  id: string;
-  table_name: string;
-  record_id: string;
-  action: string;
-  changed_by: string;
-  changed_by_email: string;
-  created_at: string;
-  old_data: any;
-  new_data: any;
-};
+// Use the imported AuditLogEntry type
+type AuditLog = AuditLogEntry;
 
 const SalesTransactions = () => {
   const { user, isAdmin } = useAuth();
@@ -160,13 +151,14 @@ const SalesTransactions = () => {
   const fetchAuditLogs = async () => {
     try {
       const { data, error } = await supabase
-        .from('sales_audit_log')
+        .from('sales_audit_log' as any)
         .select('*')
         .order('created_at', { ascending: false });
         
       if (error) throw error;
       
-      setAuditLogs(data || []);
+      // Use type assertion to make TypeScript happy
+      setAuditLogs((data || []) as AuditLog[]);
     } catch (error) {
       console.error('Error fetching audit logs:', error);
     }
