@@ -6,7 +6,7 @@ const TOAST_LIMIT = 1;
 const TOAST_REMOVE_DELAY = 1000000;
 
 type ToasterToast = {
-  id: string;
+  id?: string; // Make id optional
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: React.ReactNode;
@@ -91,15 +91,37 @@ const reducer = (state: State, action: Action): State => {
   }
 };
 
-export const toast = {
+// Create a callable toast function with proper typing
+const showToast = (props: ToasterToast | string) => {
+  if (typeof props === 'string') {
+    sonnerToast(props);
+    return props;
+  } 
+  
+  const { title, description, variant } = props as ToasterToast;
+  
+  if (variant === 'destructive') {
+    return sonnerToast.error(description as string, { 
+      id: props.id, 
+      description: title 
+    });
+  }
+  
+  return sonnerToast(description as string, { 
+    id: props.id, 
+    description: title 
+  });
+};
+
+export const toast = Object.assign(showToast, {
   ...sonnerToast,
   error: (message: string) => {
-    sonnerToast.error(message);
+    return sonnerToast.error(message);
   },
   success: (message: string) => {
-    sonnerToast.success(message);
-  },
-};
+    return sonnerToast.success(message);
+  }
+});
 
 const useToast = () => {
   const [state, dispatch] = React.useReducer(reducer, {
@@ -154,4 +176,3 @@ const useToast = () => {
 };
 
 export { useToast };
-

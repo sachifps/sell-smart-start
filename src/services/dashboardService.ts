@@ -108,8 +108,8 @@ export const fetchDashboardStats = async () => {
   } catch (error) {
     console.error("Error fetching dashboard stats:", error);
     
-    // Use proper toast without incorrect title property
-    toast("Failed to load dashboard data. Please try again later.");
+    // Fix: Use toast.error instead of direct call
+    toast.error("Failed to load dashboard data. Please try again later.");
     
     throw error;
   }
@@ -131,8 +131,8 @@ export const fetchAdditionalMetrics = async () => {
   } catch (error) {
     console.error("Error fetching additional metrics:", error);
     
-    // Use proper toast without incorrect title property
-    toast("Failed to load additional metrics. Please try again later.");
+    // Fix: Use toast.error instead of direct call
+    toast.error("Failed to load additional metrics. Please try again later.");
     
     throw error;
   }
