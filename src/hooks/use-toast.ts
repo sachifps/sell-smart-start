@@ -1,6 +1,9 @@
 
-// We're using this import from components/ui/use-toast.ts
-// which is already set up in the project
-import { useToast, toast } from "sonner";
+import { toast } from "sonner";
+import { useToast as useShadcnToast } from "@/components/ui/toast";
 
-export { useToast, toast };
+// Re-export the toast function from sonner
+export { toast };
+
+// Re-export the useToast hook from shadcn/ui
+export const useToast = useShadcnToast;
