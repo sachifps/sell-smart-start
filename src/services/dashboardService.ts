@@ -1,154 +1,206 @@
 
 import { supabase } from "@/integrations/supabase/client";
 
-interface TopProduct {
-  product_code: string;
-  product_name: string;
-  total_quantity: number;
-  total_amount: number;
+// Define all interfaces required by the Dashboard components
+export interface DashboardStats {
+  totalSales: number;
+  totalTransactions: number;
+  totalCustomers: number;
+  totalProducts: number;
+  totalEmployees: number;
+  totalDepartments: number;
 }
 
-interface TransactionData {
+export interface Transaction {
+  id: string;
+  product_name: string;
+  created_at: string;
+  quantity: number;
+  amount: number;
+}
+
+export interface TransactionsByDay {
   date: string;
+  totalAmount: number;
+  transactionCount: number;
+}
+
+export interface Product {
+  prodcode: string;
+  description: string;
   sales: number;
 }
 
-interface ProductCategory {
+export interface CategoryData {
   name: string;
   value: number;
 }
 
+// Fetch dashboard statistics 
 export async function fetchDashboardStats() {
-  // Stats Overview
-  const { data: totalTransactions } = await supabase
-    .from('transactions')
-    .select('*', { count: 'exact' });
+  try {
+    // Stats Overview
+    const { data: totalTransactions } = await supabase
+      .from('transactions')
+      .select('*', { count: 'exact' });
 
-  const { data: totalProducts } = await supabase
-    .from('product')
-    .select('*', { count: 'exact' });
+    const { data: totalProducts } = await supabase
+      .from('product')
+      .select('*', { count: 'exact' });
 
-  const { data: totalCustomers } = await supabase
-    .from('customer')
-    .select('*', { count: 'exact' });
+    const { data: totalCustomers } = await supabase
+      .from('customer')
+      .select('*', { count: 'exact' });
+    
+    const { data: totalEmployees } = await supabase
+      .from('employee')
+      .select('*', { count: 'exact' });
 
-  const { data: salesData } = await supabase
-    .from('transactions')
-    .select('amount');
+    const { data: totalDepartments } = await supabase
+      .from('department')
+      .select('*', { count: 'exact' });
 
-  const totalSales = salesData?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+    const { data: salesData } = await supabase
+      .from('transactions')
+      .select('amount');
 
-  return {
-    totalSales,
-    totalProducts: totalProducts?.length || 0,
-    totalTransactions: totalTransactions?.length || 0,
-    totalCustomers: totalCustomers?.length || 0,
-  };
+    const totalSales = salesData?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+
+    // Recent Transactions
+    const { data: recentTransactionsData } = await supabase
+      .from('transactions')
+      .select('id, product_name, created_at, quantity, amount')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    const recentTransactions = recentTransactionsData || [];
+
+    // Transactions by Day
+    const { data: transactionsByDayData } = await supabase
+      .from('transactions')
+      .select('created_at, amount')
+      .order('created_at', { ascending: true });
+
+    const last7Days = getLast7Days();
+    const transactionsByDay = transformTransactionsByDay(transactionsByDayData || [], last7Days);
+
+    // Top Products
+    const { data: topProductsData } = await supabase
+      .from('salesdetail')
+      .select(`
+        quantity,
+        prodcode,
+        product:prodcode (
+          description
+        )
+      `)
+      .limit(5);
+
+    const topProducts = transformTopProducts(topProductsData || []);
+
+    // Product Categories
+    const { data: departmentsData } = await supabase
+      .from('department')
+      .select('deptcode, deptname');
+
+    const categoryData = (departmentsData || []).map(dept => ({
+      name: dept.deptname || dept.deptcode,
+      value: Math.floor(Math.random() * 5000) + 1000 // Random value for demonstration
+    }));
+
+    // Return all data in the expected structure
+    return {
+      stats: {
+        totalSales,
+        totalTransactions: totalTransactions?.length || 0,
+        totalCustomers: totalCustomers?.length || 0,
+        totalProducts: totalProducts?.length || 0,
+        totalEmployees: totalEmployees?.length || 0,
+        totalDepartments: totalDepartments?.length || 0
+      },
+      recentTransactions,
+      transactionsByDay,
+      topProducts,
+      categoryData
+    };
+  } catch (error) {
+    console.error("Error fetching dashboard data:", error);
+    return {
+      stats: {
+        totalSales: 0,
+        totalTransactions: 0,
+        totalCustomers: 0,
+        totalProducts: 0,
+        totalEmployees: 0,
+        totalDepartments: 0
+      },
+      recentTransactions: [],
+      transactionsByDay: [],
+      topProducts: [],
+      categoryData: []
+    };
+  }
 }
 
-export async function fetchTransactionTrends(): Promise<TransactionData[]> {
-  const today = new Date();
-  const lastMonth = new Date(today);
-  lastMonth.setMonth(lastMonth.getMonth() - 1);
-  
-  const { data } = await supabase
-    .from('transactions')
-    .select('created_at, amount')
-    .gte('created_at', lastMonth.toISOString())
-    .order('created_at');
-  
-  // Group by date
-  const groupedData = (data || []).reduce<Record<string, number>>((acc, item) => {
-    const date = new Date(item.created_at!).toLocaleDateString();
-    acc[date] = (acc[date] || 0) + (item.amount || 0);
+// Helper functions
+function getLast7Days() {
+  const result = [];
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    result.push(date.toISOString().split('T')[0]); // Format: YYYY-MM-DD
+  }
+  return result;
+}
+
+function transformTransactionsByDay(transactions: any[], dateRange: string[]) {
+  // Group transactions by date
+  const groupedByDate = transactions.reduce((acc, transaction) => {
+    const date = new Date(transaction.created_at).toISOString().split('T')[0];
+    if (!acc[date]) {
+      acc[date] = {
+        totalAmount: 0,
+        transactionCount: 0
+      };
+    }
+    acc[date].totalAmount += Number(transaction.amount) || 0;
+    acc[date].transactionCount += 1;
     return acc;
   }, {});
-  
-  // Convert to array format needed by chart
-  return Object.entries(groupedData).map(([date, sales]) => ({
+
+  // Create array with data for each day in the date range
+  return dateRange.map(date => ({
     date,
-    sales,
+    totalAmount: groupedByDate[date]?.totalAmount || 0,
+    transactionCount: groupedByDate[date]?.transactionCount || 0
   }));
 }
 
-export async function fetchTopProducts(limit: number = 5): Promise<TopProduct[]> {
-  // Using the product and salesdetail tables for top products
-  const { data } = await supabase
-    .from('salesdetail')
-    .select(`
-      quantity,
-      prodcode,
-      product:prodcode (
-        description,
-        unit
-      )
-    `)
-    .limit(limit);
+function transformTopProducts(salesDetails: any[]) {
+  // Group by product and calculate totals
+  const productMap = new Map();
   
-  // Process the data to get top products
-  const productMap = new Map<string, TopProduct>();
-  
-  (data || []).forEach(item => {
+  salesDetails.forEach(item => {
     const productCode = item.prodcode;
     const quantity = parseFloat(item.quantity?.toString() || '0');
     
     if (!productMap.has(productCode)) {
       productMap.set(productCode, {
-        product_code: productCode,
-        product_name: item.product?.description || 'Unknown Product',
-        total_quantity: 0,
-        total_amount: 0
+        prodcode: productCode,
+        description: item.product?.description || 'Unknown Product',
+        sales: 0
       });
     }
     
-    const product = productMap.get(productCode)!;
-    product.total_quantity += quantity;
-    
-    // Try to get price from pricehist
-    const estimatedAmount = quantity * 100; // placeholder value
-    product.total_amount += estimatedAmount;
+    const product = productMap.get(productCode);
+    // Estimate sales amount (random for demo purposes)
+    product.sales += quantity * (Math.floor(Math.random() * 100) + 50);
   });
   
-  // Convert map to array and sort by total_amount
+  // Convert to array and sort by sales
   return Array.from(productMap.values())
-    .sort((a, b) => b.total_amount - a.total_amount)
-    .slice(0, limit);
-}
-
-export async function fetchProductCategories(): Promise<ProductCategory[]> {
-  // Using department table as categories
-  const { data: departments } = await supabase
-    .from('department')
-    .select('deptcode, deptname');
-  
-  // For demonstration purposes, create sample data based on departments
-  return (departments || []).map(dept => ({
-    name: dept.deptname || dept.deptcode,
-    value: Math.floor(Math.random() * 5000) + 1000 // Random value for demonstration
-  }));
-}
-
-export async function fetchRecentTransactions(limit: number = 5) {
-  // Get recent sales transactions
-  const { data } = await supabase
-    .from('sales')
-    .select(`
-      transno,
-      salesdate,
-      customer:custno (custname),
-      employee:empno (firstname, lastname)
-    `)
-    .order('salesdate', { ascending: false })
-    .limit(limit);
-  
-  return (data || []).map(sale => ({
-    id: sale.transno,
-    date: sale.salesdate ? new Date(sale.salesdate).toLocaleDateString() : 'Unknown',
-    customer: sale.customer?.custname || 'Unknown Customer',
-    amount: Math.floor(Math.random() * 5000) + 100, // Placeholder
-    status: Math.random() > 0.3 ? 'completed' : 'pending', // Placeholder
-    employee: sale.employee ? `${sale.employee.firstname || ''} ${sale.employee.lastname || ''}`.trim() || 'Unknown' : 'Unknown'
-  }));
+    .sort((a, b) => b.sales - a.sales)
+    .slice(0, 5);
 }
 
 // Helper function to check if user is admin

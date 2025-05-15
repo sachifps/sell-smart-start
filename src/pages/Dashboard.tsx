@@ -44,11 +44,15 @@ const Dashboard = () => {
       try {
         const data = await fetchDashboardStats();
         
-        setStats(data.stats);
-        setRecentTransactions(data.recentTransactions);
-        setTransactionsByDay(data.transactionsByDay);
-        setTopProducts(data.topProducts);
-        setCategoryData(data.categoryData);
+        if (data && data.stats) {
+          setStats(data.stats);
+          setRecentTransactions(data.recentTransactions || []);
+          setTransactionsByDay(data.transactionsByDay || []);
+          setTopProducts(data.topProducts || []);
+          setCategoryData(data.categoryData || []);
+        } else {
+          throw new Error("Invalid data structure returned from API");
+        }
       } catch (error) {
         console.error('Error loading dashboard data:', error);
         toast({
@@ -132,10 +136,22 @@ const Dashboard = () => {
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
               {/* Transactions Chart */}
-              <TransactionsChart data={transactionsByDay} />
+              {transactionsByDay.length > 0 ? (
+                <TransactionsChart data={transactionsByDay} />
+              ) : (
+                <div className="lg:col-span-2 p-6 bg-card rounded-lg border border-border flex items-center justify-center">
+                  <p className="text-muted-foreground">No transaction data available</p>
+                </div>
+              )}
               
               {/* Product Sales Distribution */}
-              <ProductPieChart data={categoryData} />
+              {categoryData.length > 0 ? (
+                <ProductPieChart data={categoryData} />
+              ) : (
+                <div className="p-6 bg-card rounded-lg border border-border flex items-center justify-center">
+                  <p className="text-muted-foreground">No product category data available</p>
+                </div>
+              )}
             </div>
             
             {/* Top Products Table */}
