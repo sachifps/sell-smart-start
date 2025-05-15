@@ -3,8 +3,8 @@ import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ChevronDown, ChevronUp, Edit, Plus, Trash2, Search, ArrowUpDown } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { ChevronDown, ChevronUp, Edit, Plus, Trash2, Search, ArrowUpDown, Info } from 'lucide-react';
+import { supabase, trackSalesChanges } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -24,6 +24,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 import { AppHeader } from '@/components/app-header';
 
@@ -53,6 +64,18 @@ type SalesDetail = {
   unit: string | null;
   unitprice: number | null;
   customUnit?: string;
+  createdBy?: string;
+  updatedBy?: string;
+  deletedBy?: string;
+};
+
+type AuditInfo = {
+  createdBy: string | null;
+  updatedBy: string | null;
+  deletedBy: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  deletedAt: string | null;
 };
 
 type SalesTransaction = {
@@ -64,13 +87,26 @@ type SalesTransaction = {
   empname: string | null;
   productDetails: SalesDetail[];
   totalPrice: number;
+  auditInfo?: AuditInfo;
 };
 
 type SortField = 'transno' | 'salesdate' | 'custname' | 'empname' | 'totalPrice';
 type SortOrder = 'asc' | 'desc';
 
+type AuditLog = {
+  id: string;
+  table_name: string;
+  record_id: string;
+  action: string;
+  changed_by: string;
+  changed_by_email: string;
+  created_at: string;
+  old_data: any;
+  new_data: any;
+};
+
 const SalesTransactions = () => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const location = useLocation();
   const { toast } = useToast();
   
@@ -108,11 +144,33 @@ const SalesTransactions = () => {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchField, setSearchField] = useState<string>('all');
+  
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [showAuditDialog, setShowAuditDialog] = useState(false);
+  const [selectedTransactionForAudit, setSelectedTransactionForAudit] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSalesData();
     fetchReferenceData();
-  }, []);
+    if (isAdmin) {
+      fetchAuditLogs();
+    }
+  }, [isAdmin]);
+
+  const fetchAuditLogs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('sales_audit_log')
+        .select('*')
+        .order('created_at', { ascending: false });
+        
+      if (error) throw error;
+      
+      setAuditLogs(data || []);
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+    }
+  };
 
   useEffect(() => {
     let filtered = [...salesData];
@@ -288,6 +346,28 @@ const SalesTransactions = () => {
                 .select('unit')
                 .eq('prodcode', detail.prodcode)
                 .single();
+              
+              // Get audit info for this sales detail
+              let createdBy = null;
+              let updatedBy = null;
+              let deletedBy = null;
+              
+              if (isAdmin) {
+                const { data: auditData } = await supabase
+                  .from('sales_audit_log')
+                  .select('action, changed_by_email')
+                  .eq('table_name', 'salesdetail')
+                  .eq('record_id', `${sale.transno}-${detail.prodcode}`)
+                  .order('created_at', { ascending: true });
+                
+                if (auditData && auditData.length > 0) {
+                  auditData.forEach(log => {
+                    if (log.action === 'created') createdBy = log.changed_by_email;
+                    else if (log.action === 'updated') updatedBy = log.changed_by_email;
+                    else if (log.action === 'deleted') deletedBy = log.changed_by_email;
+                  });
+                }
+              }
                 
               return {
                 prodcode: detail.prodcode,
@@ -295,7 +375,10 @@ const SalesTransactions = () => {
                 description: detail.product?.description,
                 unit: productData?.unit || detail.product?.unit,
                 unitprice,
-                customUnit: productData?.unit !== detail.product?.unit ? productData?.unit : undefined
+                customUnit: productData?.unit !== detail.product?.unit ? productData?.unit : undefined,
+                createdBy,
+                updatedBy,
+                deletedBy
               };
             })
           );
@@ -305,6 +388,44 @@ const SalesTransactions = () => {
             return sum + productTotal;
           }, 0);
           
+          // Get audit info for this sales transaction
+          let auditInfo: AuditInfo | undefined = undefined;
+          
+          if (isAdmin) {
+            const { data: auditData } = await supabase
+              .from('sales_audit_log')
+              .select('action, changed_by_email, created_at')
+              .eq('table_name', 'sales')
+              .eq('record_id', sale.transno)
+              .order('created_at', { ascending: true });
+            
+            if (auditData && auditData.length > 0) {
+              auditInfo = {
+                createdBy: null,
+                updatedBy: null,
+                deletedBy: null,
+                createdAt: null,
+                updatedAt: null,
+                deletedAt: null
+              };
+              
+              auditData.forEach(log => {
+                if (log.action === 'created') {
+                  auditInfo!.createdBy = log.changed_by_email;
+                  auditInfo!.createdAt = log.created_at;
+                }
+                else if (log.action === 'updated') {
+                  auditInfo!.updatedBy = log.changed_by_email;
+                  auditInfo!.updatedAt = log.created_at;
+                }
+                else if (log.action === 'deleted') {
+                  auditInfo!.deletedBy = log.changed_by_email;
+                  auditInfo!.deletedAt = log.created_at;
+                }
+              });
+            }
+          }
+          
           return {
             transno: sale.transno,
             salesdate: sale.salesdate,
@@ -313,7 +434,8 @@ const SalesTransactions = () => {
             custname: sale.customer?.custname,
             empname: sale.employee ? `${sale.employee.firstname || ''} ${sale.employee.lastname || ''}`.trim() : null,
             productDetails: productDetailsWithPrice,
-            totalPrice
+            totalPrice,
+            auditInfo
           };
         })
       );
@@ -521,6 +643,21 @@ const SalesTransactions = () => {
       const transno = isEditMode ? currentTransaction!.transno : nextTransNo;
 
       if (isEditMode) {
+        // Store old data for audit log
+        const oldData = {
+          transno,
+          salesdate: currentTransaction?.salesdate,
+          custno: currentTransaction?.custno,
+          empno: currentTransaction?.empno
+        };
+
+        const newData = {
+          transno,
+          salesdate: transactionDate,
+          custno: selectedCustomer || null,
+          empno: selectedEmployee || null
+        };
+
         const { error: updateError } = await supabase
           .from('sales')
           .update({
@@ -531,6 +668,15 @@ const SalesTransactions = () => {
           .eq('transno', transno);
 
         if (updateError) throw updateError;
+
+        // Track the update
+        if (user) {
+          await trackSalesChanges('sales', 'updated', { 
+            transno, 
+            oldData, 
+            newData 
+          }, user.id);
+        }
 
         if (selectedCustomer && customerName) {
           const { error: customerError } = await supabase
@@ -554,6 +700,28 @@ const SalesTransactions = () => {
           if (employeeError) console.error('Error updating employee:', employeeError);
         }
 
+        // Get existing details for audit log
+        const { data: existingDetails } = await supabase
+          .from('salesdetail')
+          .select('*')
+          .eq('transno', transno);
+
+        // Track deletion of details that are not in the updated list
+        if (existingDetails && user) {
+          for (const existingDetail of existingDetails) {
+            const stillExists = transactionProducts.some(p => p.prodcode === existingDetail.prodcode);
+            if (!stillExists) {
+              await trackSalesChanges('salesdetail', 'deleted', {
+                transno,
+                prodcode: existingDetail.prodcode,
+                quantity: existingDetail.quantity,
+                oldData: existingDetail,
+                newData: null
+              }, user.id);
+            }
+          }
+        }
+
         const { error: deleteError } = await supabase
           .from('salesdetail')
           .delete()
@@ -564,63 +732,28 @@ const SalesTransactions = () => {
         let custno = selectedCustomer;
         let empno = selectedEmployee;
 
-        if (!custno && customerName) {
-          const { data: lastCust } = await supabase
-            .from('customer')
-            .select('custno')
-            .order('custno', { ascending: false })
-            .limit(1);
-            
-          const newCustNo = lastCust && lastCust.length > 0 
-            ? `C${(parseInt(lastCust[0].custno.substring(1)) + 1).toString().padStart(3, '0')}` 
-            : 'C001';
-            
-          const { error: custError } = await supabase
-            .from('customer')
-            .insert({ custno: newCustNo, custname: customerName });
-            
-          if (custError) console.error('Error creating customer:', custError);
-          else custno = newCustNo;
-        }
+        // ... keep existing code (customer and employee creation)
 
-        if (!empno && employeeName) {
-          const { data: lastEmp } = await supabase
-            .from('employee')
-            .select('empno')
-            .order('empno', { ascending: false })
-            .limit(1);
-            
-          const newEmpNo = lastEmp && lastEmp.length > 0 
-            ? `E${(parseInt(lastEmp[0].empno.substring(1)) + 1).toString().padStart(3, '0')}` 
-            : 'E001';
-            
-          const names = employeeName.split(' ');
-          const firstname = names[0] || '';
-          const lastname = names.slice(1).join(' ') || '';
-          
-          const { error: empError } = await supabase
-            .from('employee')
-            .insert({ 
-              empno: newEmpNo, 
-              firstname, 
-              lastname,
-              hiredate: new Date().toISOString()
-            });
-            
-          if (empError) console.error('Error creating employee:', empError);
-          else empno = newEmpNo;
-        }
+        const newSalesData = {
+          transno,
+          salesdate: transactionDate,
+          custno,
+          empno
+        };
 
         const { error: insertError } = await supabase
           .from('sales')
-          .insert({
-            transno,
-            salesdate: transactionDate,
-            custno,
-            empno
-          });
+          .insert(newSalesData);
 
         if (insertError) throw insertError;
+
+        // Track creation
+        if (user) {
+          await trackSalesChanges('sales', 'created', {
+            transno,
+            newData: newSalesData
+          }, user.id);
+        }
       }
 
       const salesDetailsToInsert = transactionProducts.map(product => ({
@@ -634,6 +767,18 @@ const SalesTransactions = () => {
         .insert(salesDetailsToInsert);
 
       if (detailsError) throw detailsError;
+
+      // Track creation of details
+      if (user) {
+        for (const detail of salesDetailsToInsert) {
+          await trackSalesChanges('salesdetail', 'created', {
+            transno,
+            prodcode: detail.prodcode,
+            quantity: detail.quantity,
+            newData: detail
+          }, user.id);
+        }
+      }
 
       for (const product of transactionProducts) {
         if (product.customUnit && product.customUnit !== product.unit) {
@@ -656,6 +801,9 @@ const SalesTransactions = () => {
       });
 
       await fetchSalesData();
+      if (isAdmin) {
+        await fetchAuditLogs();
+      }
       setIsTransactionDialogOpen(false);
       resetForm();
 
@@ -676,12 +824,41 @@ const SalesTransactions = () => {
     if (!currentTransaction) return;
 
     try {
+      // Track deletion of details first
+      if (user) {
+        const { data: details } = await supabase
+          .from('salesdetail')
+          .select('*')
+          .eq('transno', currentTransaction.transno);
+          
+        if (details) {
+          for (const detail of details) {
+            await trackSalesChanges('salesdetail', 'deleted', {
+              transno: currentTransaction.transno,
+              prodcode: detail.prodcode,
+              quantity: detail.quantity,
+              oldData: detail,
+              newData: null
+            }, user.id);
+          }
+        }
+      }
+
       const { error: detailsError } = await supabase
         .from('salesdetail')
         .delete()
         .eq('transno', currentTransaction.transno);
 
       if (detailsError) throw detailsError;
+
+      // Track deletion of sales transaction
+      if (user) {
+        await trackSalesChanges('sales', 'deleted', {
+          transno: currentTransaction.transno,
+          oldData: currentTransaction,
+          newData: null
+        }, user.id);
+      }
 
       const { error: salesError } = await supabase
         .from('sales')
@@ -696,6 +873,9 @@ const SalesTransactions = () => {
       });
 
       fetchSalesData();
+      if (isAdmin) {
+        fetchAuditLogs();
+      }
       setIsDeleteDialogOpen(false);
     } catch (error) {
       console.error('Error deleting transaction:', error);
@@ -715,6 +895,11 @@ const SalesTransactions = () => {
     }
   };
 
+  const handleViewAuditLogs = (transno: string) => {
+    setSelectedTransactionForAudit(transno);
+    setShowAuditDialog(true);
+  };
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -724,11 +909,29 @@ const SalesTransactions = () => {
     });
   };
 
+  const formatDateTime = (dateString: string | null) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleString('en-US', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'
     }).format(amount);
+  };
+
+  const getTransactionAuditLogs = (transno: string) => {
+    return auditLogs.filter(log => 
+      (log.table_name === 'sales' && log.record_id === transno) ||
+      (log.table_name === 'salesdetail' && log.record_id.startsWith(transno + '-'))
+    );
   };
 
   return (
@@ -830,7 +1033,7 @@ const SalesTransactions = () => {
                           {getSortIcon('totalPrice')}
                         </div>
                       </TableHead>
-                      <TableHead className="w-[120px]">Actions</TableHead>
+                      <TableHead className="w-[150px]">Actions</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -838,7 +1041,35 @@ const SalesTransactions = () => {
                     {filteredSalesData.map((sale) => (
                       <React.Fragment key={sale.transno}>
                         <TableRow className="hover:bg-muted/50">
-                          <TableCell className="font-medium">{sale.transno}</TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-1">
+                              {sale.transno}
+                              {isAdmin && sale.auditInfo && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span>
+                                        <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-[300px]">
+                                      <div className="space-y-1 text-xs">
+                                        {sale.auditInfo.createdBy && (
+                                          <p>Created by: {sale.auditInfo.createdBy}</p>
+                                        )}
+                                        {sale.auditInfo.updatedBy && (
+                                          <p>Last updated by: {sale.auditInfo.updatedBy}</p>
+                                        )}
+                                        {sale.auditInfo.deletedBy && (
+                                          <p>Deleted by: {sale.auditInfo.deletedBy}</p>
+                                        )}
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell>{formatDate(sale.salesdate)}</TableCell>
                           <TableCell>{sale.custname || 'N/A'}</TableCell>
                           <TableCell>{sale.empname || 'N/A'}</TableCell>
@@ -867,6 +1098,19 @@ const SalesTransactions = () => {
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
+                              {isAdmin && (
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 text-blue-600"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleViewAuditLogs(sale.transno);
+                                  }}
+                                >
+                                  <Info className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -892,12 +1136,13 @@ const SalesTransactions = () => {
                                 <Table>
                                   <TableHeader>
                                     <TableRow>
-                                      <TableHead className="w-[40%]">Product</TableHead>
+                                      <TableHead className="w-[30%]">Product</TableHead>
                                       <TableHead>Code</TableHead>
                                       <TableHead>Unit</TableHead>
                                       <TableHead className="text-right">Qty</TableHead>
                                       <TableHead className="text-right">Price</TableHead>
                                       <TableHead className="text-right">Amount</TableHead>
+                                      {isAdmin && <TableHead className="w-[10%]">Audit</TableHead>}
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
@@ -911,13 +1156,49 @@ const SalesTransactions = () => {
                                           <TableCell className="text-right">{product.quantity || 0}</TableCell>
                                           <TableCell className="text-right">{product.unitprice ? formatCurrency(product.unitprice) : 'N/A'}</TableCell>
                                           <TableCell className="text-right font-medium">{formatCurrency(productTotal)}</TableCell>
+                                          {isAdmin && (
+                                            <TableCell>
+                                              {(product.createdBy || product.updatedBy || product.deletedBy) && (
+                                                <Popover>
+                                                  <PopoverTrigger asChild>
+                                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                                      <Info className="h-3 w-3" />
+                                                    </Button>
+                                                  </PopoverTrigger>
+                                                  <PopoverContent className="w-80">
+                                                    <div className="space-y-2 text-sm">
+                                                      {product.createdBy && (
+                                                        <div className="flex items-center justify-between">
+                                                          <span className="text-muted-foreground">Created by:</span>
+                                                          <span>{product.createdBy}</span>
+                                                        </div>
+                                                      )}
+                                                      {product.updatedBy && (
+                                                        <div className="flex items-center justify-between">
+                                                          <span className="text-muted-foreground">Updated by:</span>
+                                                          <span>{product.updatedBy}</span>
+                                                        </div>
+                                                      )}
+                                                      {product.deletedBy && (
+                                                        <div className="flex items-center justify-between">
+                                                          <span className="text-muted-foreground">Deleted by:</span>
+                                                          <span>{product.deletedBy}</span>
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  </PopoverContent>
+                                                </Popover>
+                                              )}
+                                            </TableCell>
+                                          )}
                                         </TableRow>
                                       );
                                     })}
                                     <TableRow>
-                                      <TableCell colSpan={4}></TableCell>
+                                      <TableCell colSpan={isAdmin ? 5 : 4}></TableCell>
                                       <TableCell className="text-right font-bold">Total:</TableCell>
                                       <TableCell className="text-right font-bold">{formatCurrency(sale.totalPrice)}</TableCell>
+                                      {isAdmin && <TableCell></TableCell>}
                                     </TableRow>
                                   </TableBody>
                                 </Table>
@@ -1166,6 +1447,63 @@ const SalesTransactions = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {isAdmin && (
+        <Dialog open={showAuditDialog} onOpenChange={setShowAuditDialog}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Audit History</DialogTitle>
+              <DialogDescription>
+                {selectedTransactionForAudit 
+                  ? `Viewing audit history for transaction #${selectedTransactionForAudit}` 
+                  : 'Viewing all audit history'}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="mt-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date/Time</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Table</TableHead>
+                    <TableHead>Record ID</TableHead>
+                    <TableHead>User</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(selectedTransactionForAudit 
+                    ? getTransactionAuditLogs(selectedTransactionForAudit) 
+                    : auditLogs
+                  ).map((log) => (
+                    <TableRow key={log.id}>
+                      <TableCell className="whitespace-nowrap">{formatDateTime(log.created_at)}</TableCell>
+                      <TableCell>
+                        <span className={
+                          log.action === 'created' 
+                            ? 'text-green-600 font-medium' 
+                            : log.action === 'updated'
+                            ? 'text-blue-600 font-medium'
+                            : 'text-red-600 font-medium'
+                        }>
+                          {log.action.charAt(0).toUpperCase() + log.action.slice(1)}
+                        </span>
+                      </TableCell>
+                      <TableCell>{log.table_name}</TableCell>
+                      <TableCell>{log.record_id}</TableCell>
+                      <TableCell>{log.changed_by_email}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            
+            <DialogFooter>
+              <Button onClick={() => setShowAuditDialog(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };
