@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -171,39 +170,80 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (error) throw error;
 
-      // If user is created successfully, set default "user" role
+      // If user is created successfully, check if this email was pre-registered
       if (data.user) {
-        console.log('Creating default "user" role for new user:', data.user.id);
+        // Check for pre-registered settings
+        const { data: preregisteredData, error: preregError } = await supabase
+          .from('preregistered_emails')
+          .select('*')
+          .eq('email', email)
+          .single();
         
-        // Insert the default "user" role
+        let roleToSet = 'user';
+        let permissions = {
+          can_edit_sales: false,
+          can_delete_sales: false,
+          can_add_sales: false,
+          can_edit_sales_detail: false,
+          can_delete_sales_detail: false,
+          can_add_sales_detail: false
+        };
+        
+        // If email was pre-registered, use those settings
+        if (!preregError && preregisteredData) {
+          roleToSet = preregisteredData.role;
+          permissions = {
+            can_edit_sales: preregisteredData.can_edit_sales,
+            can_delete_sales: preregisteredData.can_delete_sales,
+            can_add_sales: preregisteredData.can_add_sales,
+            can_edit_sales_detail: preregisteredData.can_edit_sales_detail,
+            can_delete_sales_detail: preregisteredData.can_delete_sales_detail,
+            can_add_sales_detail: preregisteredData.can_add_sales_detail
+          };
+        }
+
+        // Insert the profile record
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: data.user.id,
+            email: email
+          });
+          
+        if (profileError) {
+          console.error('Error setting up profile:', profileError);
+        }
+        
+        // Insert the role
         const { error: roleError } = await supabase
           .from('user_roles')
           .insert({
             user_id: data.user.id,
-            role: 'user'
+            role: roleToSet
           });
         
         if (roleError) {
           console.error('Error setting default role:', roleError);
-          // We don't throw here to still allow the signup to succeed
         }
         
-        // Create default permissions (all false for regular users)
+        // Create permissions record
         const { error: permError } = await supabase
           .from('user_permissions')
           .insert({
             user_id: data.user.id,
-            can_edit_sales: false,
-            can_delete_sales: false,
-            can_add_sales: false,
-            can_edit_sales_detail: false,
-            can_delete_sales_detail: false,
-            can_add_sales_detail: false
+            ...permissions
           });
           
         if (permError) {
           console.error('Error setting default permissions:', permError);
-          // We don't throw here to still allow the signup to succeed
+        }
+        
+        // Delete the pre-registered email entry if it exists
+        if (!preregError && preregisteredData) {
+          await supabase
+            .from('preregistered_emails')
+            .delete()
+            .eq('email', email);
         }
       }
 

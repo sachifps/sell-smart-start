@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, preregisterEmail } from '@/integrations/supabase/client';
 import { AppHeader } from '@/components/app-header';
 import { 
   Table, 
@@ -278,44 +277,18 @@ const ManageUsers = () => {
         return;
       }
 
-      // Generate a UUID for this pre-registered user
-      const tempId = crypto.randomUUID();
-      
-      // Insert into profiles
-      const { error: profileInsertError } = await supabase
-        .from('profiles')
-        .insert({
-          id: tempId,
-          email: values.email,
-        });
-      
-      if (profileInsertError) throw profileInsertError;
-      
-      // Add user role
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert({ 
-          user_id: tempId, 
-          role: values.role 
-        });
-      
-      if (roleError) throw roleError;
-      
-      // Setup default permissions based on role
+      // Set default permissions based on role
       const isUserAdmin = values.role === 'admin';
-      const { error: permError } = await supabase
-        .from('user_permissions')
-        .insert({ 
-          user_id: tempId,
-          can_edit_sales: isUserAdmin,
-          can_delete_sales: isUserAdmin,
-          can_add_sales: isUserAdmin,
-          can_edit_sales_detail: isUserAdmin,
-          can_delete_sales_detail: isUserAdmin,
-          can_add_sales_detail: isUserAdmin
-        });
       
-      if (permError) throw permError;
+      // Use the preregisterEmail function to handle registration
+      await preregisterEmail(values.email, values.role, {
+        can_edit_sales: isUserAdmin,
+        can_delete_sales: isUserAdmin,
+        can_add_sales: isUserAdmin,
+        can_edit_sales_detail: isUserAdmin,
+        can_delete_sales_detail: isUserAdmin,
+        can_add_sales_detail: isUserAdmin
+      });
       
       toast({
         title: "Success",
