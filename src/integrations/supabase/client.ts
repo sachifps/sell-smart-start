@@ -9,7 +9,12 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true
+  }
+});
 
 // Helper functions for soft deletion and tracking
 export const softDelete = async (table: string, id: string, userId: string) => {
@@ -34,12 +39,12 @@ export const restoreDeleted = async (table: string, id: string) => {
 
 export const getSalesWithUserInfo = async (includeDeleted = false) => {
   let query = supabase
-    .from('transactions' as any)
+    .from('transactions')
     .select(`
       *,
-      created_by_user:created_by(email),
-      updated_by_user:updated_by(email),
-      deleted_by_user:deleted_by(email)
+      created_by_user:profiles!created_by(email),
+      updated_by_user:profiles!updated_by(email),
+      deleted_by_user:profiles!deleted_by(email)
     `);
 
   if (!includeDeleted) {

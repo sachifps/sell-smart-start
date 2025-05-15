@@ -24,14 +24,22 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useToast } from '@/hooks/use-toast';
-import { Shield, Settings, RefreshCcw, UserPlus } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+import { Shield, Settings, RefreshCcw, UserPlus, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 type User = {
   id: string;
   email: string;
   role: 'admin' | 'user';
+  last_sign_in_at?: string | null;
+  created_at?: string;
 };
 
 type UserPermission = {
@@ -64,10 +72,55 @@ const ManageUsers = () => {
     try {
       setLoading(true);
       
+      // Get all users from Supabase auth
+      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+      
+      if (authError) {
+        console.error('Error fetching auth users:', authError);
+        // Fallback to using profiles table
+        return fetchUsersFromProfiles();
+      }
+      
+      if (authUsers && authUsers.users) {
+        // Get user roles
+        const { data: roles, error: rolesError } = await supabase
+          .from('user_roles')
+          .select('user_id, role');
+        
+        if (rolesError) throw rolesError;
+        
+        // Combine data
+        const usersList = authUsers.users.map(authUser => {
+          const userRole = roles?.find(role => role.user_id === authUser.id);
+          return {
+            id: authUser.id,
+            email: authUser.email || 'No email',
+            role: userRole ? userRole.role : 'user',
+            last_sign_in_at: authUser.last_sign_in_at,
+            created_at: authUser.created_at
+          };
+        });
+        
+        setUsers(usersList);
+        setLoading(false);
+      } else {
+        // Fallback to using profiles table
+        fetchUsersFromProfiles();
+      }
+    } catch (error) {
+      console.error('Error in fetchUsers:', error);
+      // Fallback to using profiles table
+      fetchUsersFromProfiles();
+    }
+  };
+  
+  // Fallback method to fetch users from profiles table
+  const fetchUsersFromProfiles = async () => {
+    try {
       // Get all users from profiles table
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, email');
+        .select('id, email, created_at');
       
       if (profilesError) throw profilesError;
       
@@ -80,17 +133,18 @@ const ManageUsers = () => {
       
       // Combine data
       const usersList = profiles.map(profile => {
-        const userRole = roles.find(role => role.user_id === profile.id);
+        const userRole = roles?.find(role => role.user_id === profile.id);
         return {
           id: profile.id,
           email: profile.email,
-          role: userRole ? userRole.role : 'user'
+          role: userRole ? userRole.role : 'user',
+          created_at: profile.created_at
         };
       });
       
       setUsers(usersList);
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error('Error fetching users from profiles:', error);
       toast({
         title: "Error",
         description: "Failed to load users",
@@ -105,7 +159,7 @@ const ManageUsers = () => {
     try {
       // Use type assertion for the table name
       const { data, error } = await supabase
-        .from('user_permissions' as any)
+        .from('user_permissions')
         .select('*')
         .eq('user_id', userId)
         .single();
@@ -136,7 +190,7 @@ const ManageUsers = () => {
       
       // Update in database - using type assertion
       const { error } = await supabase
-        .from('user_permissions' as any)
+        .from('user_permissions')
         .update({ [permission]: value, updated_at: new Date().toISOString() })
         .eq('user_id', selectedUser.id);
       
@@ -191,9 +245,9 @@ const ManageUsers = () => {
       
       if (roleError) throw roleError;
       
-      // Update permissions - using type assertion
+      // Update permissions
       const { error: permError } = await supabase
-        .from('user_permissions' as any)
+        .from('user_permissions')
         .upsert({ 
           user_id: userData.id,
           can_edit_sales: true,
@@ -297,6 +351,8 @@ const ManageUsers = () => {
                 <TableRow>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Created At</TableHead>
+                  <TableHead>Last Login</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -315,6 +371,10 @@ const ManageUsers = () => {
                           <span>User</span>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell>{user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}</TableCell>
+                    <TableCell>
+                      {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleDateString() : 'Never'}
                     </TableCell>
                     <TableCell className="text-right">
                       <Dialog>
@@ -443,8 +503,11 @@ const ManageUsers = () => {
                 ))}
                 {users.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center py-6 text-muted-foreground">
-                      No users found
+                    <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <AlertCircle className="h-5 w-5 text-muted-foreground" />
+                        <p>No users found</p>
+                      </div>
                     </TableCell>
                   </TableRow>
                 )}
