@@ -25,7 +25,7 @@ const CustomTooltip = ({ active, payload }: any) => {
   
   return (
     <div className="bg-background border border-border rounded-md shadow-md p-3">
-      <p className="text-sm font-medium">{new Date(payload[0].payload.date).toLocaleDateString()}</p>
+      <p className="text-sm font-medium">{payload[0].payload.date}</p>
       <p className="text-xs text-blue-500">
         Sales: {new Intl.NumberFormat('en-US', { 
           style: 'currency', 

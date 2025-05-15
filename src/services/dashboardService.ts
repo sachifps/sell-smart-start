@@ -2,6 +2,33 @@
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/utils/formatters";
 
+// Define TypeScript interfaces for the data structures
+export interface Product {
+  id: number;
+  name: string;
+  sales: number;
+  revenue: number;
+}
+
+export interface Transaction {
+  id: string;
+  date: Date;
+  customer: string;
+  amount: number;
+  status: string;
+}
+
+export interface CategoryData {
+  name: string;
+  value: number;
+}
+
+export interface TransactionsByDay {
+  date: string;
+  totalAmount: number;
+  transactionCount: number;
+}
+
 // Mock data for dashboard
 export const fetchDashboardStats = async () => {
   try {

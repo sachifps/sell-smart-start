@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchDashboardStats, fetchAdditionalMetrics } from '@/services/dashboardService';
@@ -10,6 +11,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { PieChart, Pie, Cell, Legend } from 'recharts';
 import { CalendarIcon, TrendingUpIcon, UsersIcon, BarChart2Icon, PieChartIcon } from 'lucide-react';
 import DashboardLayout from '@/components/layouts/DashboardLayout';
+import { toast } from "@/hooks/use-toast";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
