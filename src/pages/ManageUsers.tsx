@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
-import { Shield, Settings, RefreshCcw, UserPlus, AlertCircle, Mail, UserCheck } from 'lucide-react';
+import { Shield, Settings, RefreshCcw, UserPlus, AlertCircle, Mail, UserCheck, Lock } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   TooltipProvider,
@@ -49,6 +48,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 type User = {
   id: string;
@@ -503,6 +503,15 @@ const ManageUsers = () => {
             )}
           </div>
         </div>
+
+        {!isAdmin && (
+          <Alert className="mb-6 bg-blue-50 text-blue-800 border border-blue-200">
+            <AlertDescription className="flex items-center">
+              <Lock className="h-4 w-4 mr-2" />
+              <span>You are in view-only mode. Only administrators can modify user permissions.</span>
+            </AlertDescription>
+          </Alert>
+        )}
         
         {loading ? (
           <div className="space-y-4">
