@@ -28,9 +28,9 @@ import { useToast } from '@/components/ui/use-toast';
 import { Shield, Settings, RefreshCcw, UserPlus, AlertCircle, Mail, Lock, User } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  TooltipProvider,
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Label } from '@/components/ui/label';
@@ -127,13 +127,13 @@ const ManageUsers = () => {
         throw rolesError;
       }
       
-      // Map roles to users
-      const usersList = profilesData.map(profile => {
+      // Map roles to users with proper typing
+      const usersList: User[] = profilesData.map(profile => {
         const userRole = rolesData.find(role => role.user_id === profile.id);
         return {
           id: profile.id,
           email: profile.email || 'No email',
-          role: userRole?.role === 'admin' ? 'admin' : 'user',
+          role: (userRole?.role === 'admin' ? 'admin' : 'user') as 'admin' | 'user',
           created_at: profile.created_at
         };
       });
