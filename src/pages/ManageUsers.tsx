@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
-import { Shield, Settings, RefreshCcw, UserPlus, AlertCircle, Mail, UserCheck, Lock } from 'lucide-react';
+import { Shield, Settings, RefreshCcw, UserPlus, AlertCircle, Mail, UserCheck, Lock, Pencil } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   TooltipProvider,
@@ -619,7 +618,7 @@ const ManageUsers = () => {
                               className="ml-2 h-6 w-6" 
                               onClick={() => openEditRole(user)}
                             >
-                              <Edit className="h-3 w-3" />
+                              <Pencil className="h-3 w-3" />
                               <span className="sr-only">Edit role</span>
                             </Button>
                           )}
