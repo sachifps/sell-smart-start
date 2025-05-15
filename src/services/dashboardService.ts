@@ -74,8 +74,8 @@ export const fetchDashboardStats = async (): Promise<{
     const latestPrices: Record<string, number> = {};
     priceHistData.forEach(price => {
       const prodcode = price.prodcode;
-      if (!latestPrices[prodcode] || new Date(price.effdate) > new Date(latestPrices[prodcode])) {
-        latestPrices[prodcode] = parseFloat(price.unitprice);
+      if (!latestPrices[prodcode] || new Date(price.effdate) > new Date(String(latestPrices[prodcode]))) {
+        latestPrices[prodcode] = parseFloat(String(price.unitprice));
       }
     });
 
