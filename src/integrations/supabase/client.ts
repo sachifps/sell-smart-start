@@ -176,3 +176,47 @@ export const trackSalesChanges = async (table: 'sales' | 'salesdetail', action: 
     console.error('Error tracking sales changes:', error);
   }
 };
+
+// Function to update a user's role
+export const updateUserRole = async (userId: string, role: 'admin' | 'user') => {
+  try {
+    // First, check if there's an existing role for this user
+    const { data: existingRole, error: checkError } = await supabase
+      .from('user_roles')
+      .select('id')
+      .eq('user_id', userId)
+      .single();
+      
+    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows found" which is expected
+      throw checkError;
+    }
+    
+    if (existingRole) {
+      // Update existing role
+      const { error: updateError } = await supabase
+        .from('user_roles')
+        .update({ 
+          role, 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('user_id', userId);
+        
+      if (updateError) throw updateError;
+      return { message: 'User role updated successfully' };
+    } else {
+      // Create new role
+      const { error: insertError } = await supabase
+        .from('user_roles')
+        .insert({ 
+          user_id: userId, 
+          role 
+        });
+        
+      if (insertError) throw insertError;
+      return { message: 'User role created successfully' };
+    }
+  } catch (error) {
+    console.error('Error updating user role:', error);
+    throw error;
+  }
+};

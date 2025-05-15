@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase, preregisterEmail } from '@/integrations/supabase/client';
+import { supabase, preregisterEmail, updateUserRole } from '@/integrations/supabase/client';
 import { AppHeader } from '@/components/app-header';
 import { 
   Table, 
@@ -89,6 +90,9 @@ const ManageUsers = () => {
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [editingPermissions, setEditingPermissions] = useState(false);
+  const [editRoleOpen, setEditRoleOpen] = useState(false);
+  const [updatingRole, setUpdatingRole] = useState(false);
+  const [newRole, setNewRole] = useState<'admin' | 'user'>('user');
 
   // Initialize form for adding users
   const addUserForm = useForm<AddUserFormValues>({
@@ -406,6 +410,67 @@ const ManageUsers = () => {
     setEditingPermissions(!editingPermissions);
   };
 
+  // Open the edit role dialog
+  const openEditRole = (user: User) => {
+    if (!isAdmin || user.id === undefined) return;
+    
+    setSelectedUser(user);
+    setNewRole(user.role);
+    setEditRoleOpen(true);
+  };
+  
+  // Handle role update
+  const handleRoleUpdate = async () => {
+    if (!isAdmin || !selectedUser || selectedUser.id === undefined) return;
+    
+    try {
+      setUpdatingRole(true);
+      
+      if (selectedUser.isPreRegistered) {
+        // Update pre-registered user role
+        const email = selectedUser.email;
+        
+        const { error } = await supabase
+          .from('preregistered_emails')
+          .update({ 
+            role: newRole,
+            updated_at: new Date().toISOString() 
+          })
+          .eq('email', email);
+          
+        if (error) throw error;
+      } else {
+        // Update registered user role
+        await updateUserRole(selectedUser.id, newRole);
+      }
+      
+      // Update local state
+      setUsers(prevUsers => 
+        prevUsers.map(u => 
+          u.id === selectedUser.id ? { ...u, role: newRole } : u
+        )
+      );
+      
+      toast({
+        title: "Success",
+        description: `User role has been updated to ${newRole}`
+      });
+      
+      // Close dialog and refresh users
+      setEditRoleOpen(false);
+      fetchUsers();
+      
+    } catch (error: any) {
+      console.error('Error updating role:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update user role"
+      });
+    } finally {
+      setUpdatingRole(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <AppHeader currentPath="/manage-users" />
@@ -546,6 +611,17 @@ const ManageUsers = () => {
                             </div>
                           ) : (
                             <span>User</span>
+                          )}
+                          {isAdmin && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="ml-2 h-6 w-6" 
+                              onClick={() => openEditRole(user)}
+                            >
+                              <Edit className="h-3 w-3" />
+                              <span className="sr-only">Edit role</span>
+                            </Button>
                           )}
                         </div>
                       </TableCell>
@@ -790,6 +866,49 @@ const ManageUsers = () => {
           </div>
         )}
       </main>
+
+      {/* Edit Role Dialog */}
+      <Dialog open={editRoleOpen} onOpenChange={setEditRoleOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit User Role</DialogTitle>
+            <DialogDescription>
+              Change the role for {selectedUser?.email}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-6">
+            <Label htmlFor="role">Select Role</Label>
+            <Select 
+              value={newRole} 
+              onValueChange={(value) => setNewRole(value as 'admin' | 'user')}
+            >
+              <SelectTrigger className="mt-2">
+                <SelectValue placeholder="Select role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="user">Regular User</SelectItem>
+                <SelectItem value="admin">Administrator</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            <div className="mt-2 text-sm text-muted-foreground">
+              {newRole === 'admin' ? 
+                'Administrators have full access to all functionality including user management.' : 
+                'Regular users have limited access based on assigned permissions.'}
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button onClick={() => setEditRoleOpen(false)} variant="outline">
+              Cancel
+            </Button>
+            <Button onClick={handleRoleUpdate} disabled={updatingRole}>
+              {updatingRole ? 'Updating...' : 'Update Role'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
