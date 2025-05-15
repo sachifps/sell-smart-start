@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
-import { Shield, Settings, RefreshCcw, UserPlus, AlertCircle } from 'lucide-react';
+import { Shield, Settings, RefreshCcw, UserPlus, AlertCircle, Mail, Lock, User } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Tooltip,
@@ -33,6 +32,20 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { Label } from '@/components/ui/label';
+import { z } from 'zod';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type User = {
   id: string;
@@ -53,6 +66,16 @@ type UserPermission = {
   can_add_sales_detail: boolean;
 };
 
+// Define form schema for adding a new user
+const addUserSchema = z.object({
+  email: z.string().email({ message: "Please enter a valid email address" }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+  name: z.string().min(1, { message: "Name is required" }),
+  role: z.enum(['user', 'admin']),
+});
+
+type AddUserFormValues = z.infer<typeof addUserSchema>;
+
 const ManageUsers = () => {
   const { isAdmin, user } = useAuth();
   const navigate = useNavigate();
@@ -63,6 +86,19 @@ const ManageUsers = () => {
   const [permissions, setPermissions] = useState<UserPermission | null>(null);
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [addingAdmin, setAddingAdmin] = useState(false);
+  const [addUserOpen, setAddUserOpen] = useState(false);
+  const [isAddingUser, setIsAddingUser] = useState(false);
+
+  // Initialize form for adding users
+  const addUserForm = useForm<AddUserFormValues>({
+    resolver: zodResolver(addUserSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+      name: '',
+      role: 'user',
+    },
+  });
 
   useEffect(() => {
     fetchUsers();
@@ -280,6 +316,76 @@ const ManageUsers = () => {
     }
   };
 
+  // New function to add a user
+  const handleAddUser = async (values: AddUserFormValues) => {
+    if (!isAdmin) return;
+    
+    try {
+      setIsAddingUser(true);
+      
+      // Create the user in Supabase Auth
+      const { data: userData, error: createError } = await supabase.auth.admin.createUser({
+        email: values.email,
+        password: values.password,
+        email_confirm: true,
+        user_metadata: {
+          name: values.name,
+        },
+      });
+      
+      if (createError) throw createError;
+      
+      if (userData.user) {
+        // Add user role
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .insert({ 
+            user_id: userData.user.id, 
+            role: values.role 
+          });
+        
+        if (roleError) throw roleError;
+        
+        // Setup default permissions based on role
+        const isUserAdmin = values.role === 'admin';
+        const { error: permError } = await supabase
+          .from('user_permissions')
+          .insert({ 
+            user_id: userData.user.id,
+            can_edit_sales: isUserAdmin,
+            can_delete_sales: isUserAdmin,
+            can_add_sales: isUserAdmin,
+            can_edit_sales_detail: isUserAdmin,
+            can_delete_sales_detail: isUserAdmin,
+            can_add_sales_detail: isUserAdmin
+          });
+        
+        if (permError) throw permError;
+        
+        toast({
+          title: "Success",
+          description: `User ${values.email} has been created`
+        });
+        
+        // Reset form and close dialog
+        addUserForm.reset();
+        setAddUserOpen(false);
+        
+        // Refresh users list
+        fetchUsers();
+      }
+    } catch (error: any) {
+      console.error('Error adding user:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create user",
+        variant: "destructive"
+      });
+    } finally {
+      setIsAddingUser(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <AppHeader currentPath="/manage-users" />
@@ -302,37 +408,145 @@ const ManageUsers = () => {
             </Button>
             
             {isAdmin && (
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button className="flex items-center">
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Add Admin
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add New Admin</DialogTitle>
-                    <DialogDescription>
-                      Enter the email of the user you want to assign admin privileges.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="py-4">
-                    <Input
-                      placeholder="user@example.com"
-                      value={newAdminEmail}
-                      onChange={(e) => setNewAdminEmail(e.target.value)}
-                    />
-                  </div>
-                  <DialogFooter>
-                    <Button 
-                      onClick={handleAddAdmin} 
-                      disabled={!newAdminEmail || addingAdmin}
-                    >
-                      {addingAdmin ? 'Adding...' : 'Add Admin'}
+              <>
+                <Dialog open={addUserOpen} onOpenChange={setAddUserOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="flex items-center">
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Add User
                     </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Add New User</DialogTitle>
+                      <DialogDescription>
+                        Create a new user account with specified role and permissions.
+                      </DialogDescription>
+                    </DialogHeader>
+                    
+                    <Form {...addUserForm}>
+                      <form onSubmit={addUserForm.handleSubmit(handleAddUser)} className="space-y-4 py-2">
+                        <FormField
+                          control={addUserForm.control}
+                          name="name"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Name</FormLabel>
+                              <FormControl>
+                                <div className="flex items-center">
+                                  <User className="mr-2 h-4 w-4 text-muted-foreground" />
+                                  <Input placeholder="John Doe" {...field} />
+                                </div>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={addUserForm.control}
+                          name="email"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Email</FormLabel>
+                              <FormControl>
+                                <div className="flex items-center">
+                                  <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
+                                  <Input placeholder="user@example.com" {...field} />
+                                </div>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={addUserForm.control}
+                          name="password"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Password</FormLabel>
+                              <FormControl>
+                                <div className="flex items-center">
+                                  <Lock className="mr-2 h-4 w-4 text-muted-foreground" />
+                                  <Input type="password" placeholder="******" {...field} />
+                                </div>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={addUserForm.control}
+                          name="role"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>User Role</FormLabel>
+                              <Select 
+                                onValueChange={field.onChange} 
+                                defaultValue={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select a role" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="user">Regular User</SelectItem>
+                                  <SelectItem value="admin">Administrator</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormDescription>
+                                Admins have full access to all functionality
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <DialogFooter className="mt-6">
+                          <Button type="submit" disabled={isAddingUser}>
+                            {isAddingUser ? 'Creating...' : 'Create User'}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </Form>
+                  </DialogContent>
+                </Dialog>
+                
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button className="flex items-center">
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Add Admin
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add New Admin</DialogTitle>
+                      <DialogDescription>
+                        Enter the email of the user you want to assign admin privileges.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                      <Input
+                        placeholder="user@example.com"
+                        value={newAdminEmail}
+                        onChange={(e) => setNewAdminEmail(e.target.value)}
+                      />
+                    </div>
+                    <DialogFooter>
+                      <Button 
+                        onClick={handleAddAdmin} 
+                        disabled={!newAdminEmail || addingAdmin}
+                      >
+                        {addingAdmin ? 'Adding...' : 'Add Admin'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </>
             )}
           </div>
         </div>
