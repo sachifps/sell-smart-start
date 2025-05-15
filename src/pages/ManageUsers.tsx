@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
-import { Shield, Settings, RefreshCcw, UserPlus, AlertCircle, Mail } from 'lucide-react';
+import { Shield, Settings, RefreshCcw, UserPlus, AlertCircle, Mail, UserCheck } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   TooltipProvider,
@@ -47,6 +48,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 
 type User = {
   id: string;
@@ -54,6 +56,7 @@ type User = {
   role: 'admin' | 'user';
   last_sign_in_at?: string | null;
   created_at?: string;
+  isPreRegistered?: boolean;
 };
 
 type UserPermission = {
@@ -133,6 +136,18 @@ const ManageUsers = () => {
       
       console.log('ManageUsers - Roles data:', rolesData);
       
+      // Fetch pre-registered emails
+      const { data: preregisteredData, error: preregisteredError } = await supabase
+        .from('preregistered_emails')
+        .select('email, role, created_at');
+        
+      if (preregisteredError) {
+        console.error('ManageUsers - Preregistered emails error:', preregisteredError);
+        throw preregisteredError;
+      }
+      
+      console.log('ManageUsers - Preregistered emails data:', preregisteredData);
+      
       // Map roles to users with proper typing
       const usersList: User[] = profilesData.map(profile => {
         const userRole = rolesData.find(role => role.user_id === profile.id);
@@ -142,9 +157,28 @@ const ManageUsers = () => {
           id: profile.id,
           email: profile.email || 'No email',
           role: roleValue as 'admin' | 'user',
-          created_at: profile.created_at
+          created_at: profile.created_at,
+          isPreRegistered: false
         };
       });
+      
+      // Add pre-registered emails to the users list
+      if (preregisteredData) {
+        const preregisteredUsers = preregisteredData.map(preregistered => ({
+          id: `pre-${preregistered.email}`, // Use a prefix to differentiate from real user IDs
+          email: preregistered.email,
+          role: preregistered.role as 'admin' | 'user',
+          created_at: preregistered.created_at,
+          isPreRegistered: true
+        }));
+        
+        // Filter out pre-registered emails that already have accounts
+        const filteredPreregistered = preregisteredUsers.filter(preUser => 
+          !usersList.some(user => user.email === preUser.email)
+        );
+        
+        usersList.push(...filteredPreregistered);
+      }
       
       console.log('ManageUsers - Processed users list:', usersList);
       setUsers(usersList);
@@ -162,15 +196,42 @@ const ManageUsers = () => {
   const fetchUserPermissions = async (userId: string) => {
     try {
       setEditingPermissions(false);
-      const { data, error } = await supabase
-        .from('user_permissions')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
       
-      if (error) throw error;
-      
-      setPermissions(data as unknown as UserPermission);
+      // Check if this is a pre-registered user (has the "pre-" prefix)
+      if (userId.startsWith('pre-')) {
+        // For pre-registered users, fetch permissions from preregistered_emails table
+        const email = userId.replace('pre-', '');
+        const { data, error } = await supabase
+          .from('preregistered_emails')
+          .select('*')
+          .eq('email', email)
+          .single();
+        
+        if (error) throw error;
+        
+        // Map the preregistered email data to match the permissions structure
+        setPermissions({
+          id: data.id,
+          user_id: userId,
+          can_edit_sales: data.can_edit_sales,
+          can_delete_sales: data.can_delete_sales,
+          can_add_sales: data.can_add_sales,
+          can_edit_sales_detail: data.can_edit_sales_detail,
+          can_delete_sales_detail: data.can_delete_sales_detail,
+          can_add_sales_detail: data.can_add_sales_detail
+        });
+      } else {
+        // For regular users, fetch permissions from user_permissions table
+        const { data, error } = await supabase
+          .from('user_permissions')
+          .select('*')
+          .eq('user_id', userId)
+          .single();
+        
+        if (error) throw error;
+        
+        setPermissions(data as unknown as UserPermission);
+      }
     } catch (error) {
       console.error('Error fetching user permissions:', error);
       toast({
@@ -190,13 +251,26 @@ const ManageUsers = () => {
         [permission]: value
       });
       
-      // Update in database - using type assertion
-      const { error } = await supabase
-        .from('user_permissions')
-        .update({ [permission]: value, updated_at: new Date().toISOString() })
-        .eq('user_id', selectedUser.id);
-      
-      if (error) throw error;
+      // If it's a pre-registered user
+      if (selectedUser.isPreRegistered) {
+        const email = selectedUser.email;
+        
+        // Update in preregistered_emails table
+        const { error } = await supabase
+          .from('preregistered_emails')
+          .update({ [permission]: value, updated_at: new Date().toISOString() })
+          .eq('email', email);
+          
+        if (error) throw error;
+      } else {
+        // Update in user_permissions table
+        const { error } = await supabase
+          .from('user_permissions')
+          .update({ [permission]: value, updated_at: new Date().toISOString() })
+          .eq('user_id', selectedUser.id);
+        
+        if (error) throw error;
+      }
       
       toast({
         title: "Success",
@@ -221,21 +295,36 @@ const ManageUsers = () => {
     try {
       setEditingPermissions(false);
       
-      // Update in database
-      const { error } = await supabase
-        .from('user_permissions')
-        .update({ 
-          can_edit_sales: permissions.can_edit_sales,
-          can_delete_sales: permissions.can_delete_sales,
-          can_add_sales: permissions.can_add_sales,
-          can_edit_sales_detail: permissions.can_edit_sales_detail,
-          can_delete_sales_detail: permissions.can_delete_sales_detail,
-          can_add_sales_detail: permissions.can_add_sales_detail,
-          updated_at: new Date().toISOString() 
-        })
-        .eq('user_id', selectedUser.id);
+      const permissionData = { 
+        can_edit_sales: permissions.can_edit_sales,
+        can_delete_sales: permissions.can_delete_sales,
+        can_add_sales: permissions.can_add_sales,
+        can_edit_sales_detail: permissions.can_edit_sales_detail,
+        can_delete_sales_detail: permissions.can_delete_sales_detail,
+        can_add_sales_detail: permissions.can_add_sales_detail,
+        updated_at: new Date().toISOString() 
+      };
       
-      if (error) throw error;
+      // If it's a pre-registered user
+      if (selectedUser.isPreRegistered) {
+        const email = selectedUser.email;
+        
+        // Update in preregistered_emails table
+        const { error } = await supabase
+          .from('preregistered_emails')
+          .update(permissionData)
+          .eq('email', email);
+          
+        if (error) throw error;
+      } else {
+        // Update in user_permissions table
+        const { error } = await supabase
+          .from('user_permissions')
+          .update(permissionData)
+          .eq('user_id', selectedUser.id);
+        
+        if (error) throw error;
+      }
       
       toast({
         title: "Success",
@@ -299,7 +388,7 @@ const ManageUsers = () => {
       addUserForm.reset();
       setAddUserOpen(false);
       
-      // Refresh users list
+      // Refresh users list to show the newly added pre-registered email
       fetchUsers();
     } catch (error: any) {
       console.error('Error pre-registering email:', error);
@@ -325,7 +414,7 @@ const ManageUsers = () => {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold mb-1">Manage Users</h1>
-            <p className="text-muted-foreground">All users from Supabase profiles table</p>
+            <p className="text-muted-foreground">All users and pre-registered emails</p>
           </div>
           
           <div className="flex space-x-4">
@@ -429,6 +518,7 @@ const ManageUsers = () => {
                 <TableRow>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Created At</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -449,6 +539,19 @@ const ManageUsers = () => {
                             <span>User</span>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {user.isPreRegistered ? (
+                          <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200">
+                            <Mail className="h-3 w-3 mr-1" />
+                            Pre-registered
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
+                            <UserCheck className="h-3 w-3 mr-1" />
+                            Active
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>{user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}</TableCell>
                       <TableCell className="text-right">
@@ -474,6 +577,11 @@ const ManageUsers = () => {
                                   ? `Configure permissions for ${selectedUser?.email}`
                                   : `View permissions for ${selectedUser?.email}`
                                 }
+                                {selectedUser?.isPreRegistered && (
+                                  <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200 mt-2">
+                                    Pre-registered
+                                  </Badge>
+                                )}
                               </DialogDescription>
                             </DialogHeader>
                             
@@ -660,7 +768,7 @@ const ManageUsers = () => {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <AlertCircle className="h-5 w-5 text-muted-foreground" />
                         <p>No users found</p>
